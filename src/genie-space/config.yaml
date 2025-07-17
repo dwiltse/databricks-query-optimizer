@@ -1,0 +1,316 @@
+# Databricks Query Performance Optimizer Configuration
+# Central configuration for all business rules, thresholds, and system settings
+
+name: "Databricks Query Performance Optimizer"
+description: "AI-powered query performance analysis and optimization recommendations"
+version: "2.0.0"
+
+# Schema Configuration
+schemas:
+  cost_optimization:
+    catalog: "mcp"
+    schema: "cost_optimization"
+    description: "Existing cost optimization schema"
+  
+  query_optimization:
+    catalog: "mcp" 
+    schema: "query_optimization"
+    description: "New query performance optimization schema"
+
+# Performance Thresholds
+performance_thresholds:
+  # Query Duration Thresholds (milliseconds)
+  slow_query_warning_ms: 300000      # 5 minutes - Medium alert
+  slow_query_critical_ms: 900000     # 15 minutes - High alert
+  slow_query_emergency_ms: 1800000   # 30 minutes - Critical alert
+  
+  # Cost Thresholds (DBUs)
+  expensive_query_warning_dbu: 10    # Medium cost alert
+  expensive_query_high_dbu: 20       # High cost alert
+  expensive_query_critical_dbu: 50   # Critical cost alert
+  
+  # Data Scan Thresholds (bytes)
+  large_scan_warning_bytes: 1073741824    # 1GB
+  large_scan_critical_bytes: 5368709120   # 5GB
+  very_large_scan_bytes: 21474836480      # 20GB
+  
+  # Success Rate Thresholds
+  min_acceptable_success_rate: 0.90       # 90%
+  target_success_rate: 0.95               # 95%
+  excellent_success_rate: 0.99            # 99%
+
+# Optimization Scoring
+optimization_scoring:
+  # Optimization Score Ranges (1-10 scale)
+  excellent_score_min: 9.0          # Excellent optimization (9-10)
+  good_score_min: 7.0               # Good optimization (7-8)
+  average_score_min: 5.0            # Average optimization (5-6)
+  poor_score_min: 3.0               # Poor optimization (3-4)
+  # Below 3.0 is Critical (1-2)
+  
+  # Complexity Score Ranges (1-10 scale)
+  high_complexity_min: 7.0          # High complexity queries
+  medium_complexity_min: 4.0        # Medium complexity queries
+  # Below 4.0 is Low complexity
+
+# Alert Configuration
+alerting:
+  # Alert Severities
+  severities:
+    critical:
+      description: "Immediate attention required"
+      response_time_minutes: 15
+      escalation_enabled: true
+    
+    high:
+      description: "High priority issue"
+      response_time_minutes: 60
+      escalation_enabled: true
+    
+    medium:
+      description: "Medium priority issue"
+      response_time_minutes: 240
+      escalation_enabled: false
+    
+    low:
+      description: "Low priority monitoring"
+      response_time_minutes: 1440
+      escalation_enabled: false
+  
+  # Alert Thresholds
+  thresholds:
+    # Failure rate alerts
+    high_failure_rate_threshold: 0.20      # 20% failure rate
+    critical_failure_rate_threshold: 0.50  # 50% failure rate
+    
+    # Resource utilization alerts
+    under_utilization_threshold: 0.30      # 30% utilization
+    over_utilization_threshold: 0.80       # 80% utilization
+    critical_utilization_threshold: 0.95   # 95% utilization
+
+# Optimization Opportunities
+optimization:
+  # Priority Scoring Thresholds (USD savings per month)
+  priority_thresholds:
+    high_priority_monthly_savings: 1000    # $1000/month
+    medium_priority_monthly_savings: 500   # $500/month
+    low_priority_monthly_savings: 100      # $100/month
+  
+  # Pattern-based Optimization Weights
+  pattern_savings_estimates:
+    select_all: 0.30                # 30% savings from removing SELECT *
+    unbounded_sort: 0.50            # 50% savings from adding LIMIT
+    cartesian_join: 0.80            # 80% savings from fixing joins
+    unpartitioned_filter: 0.40      # 40% savings from partition filters
+    redundant_distinct: 0.20        # 20% savings from removing redundant DISTINCT
+    union_optimization: 0.15        # 15% savings from UNION ALL
+    large_scan_optimization: 0.60   # 60% savings from better data access
+    general_optimization: 0.25      # 25% general optimization savings
+  
+  # Implementation Effort Classifications
+  implementation_effort:
+    low:
+      description: "Simple changes, < 1 hour per query"
+      patterns: ["select_all", "unbounded_sort", "redundant_distinct", "union_optimization"]
+    
+    medium:
+      description: "Moderate changes, 1-4 hours per query"
+      patterns: ["unpartitioned_filter", "large_scan_optimization"]
+    
+    high:
+      description: "Complex changes, > 4 hours per query"
+      patterns: ["cartesian_join", "general_optimization"]
+
+# Resource Utilization
+resource_utilization:
+  # Utilization Categories (percentages)
+  under_utilized_max: 30           # < 30% = Under-utilized
+  moderately_utilized_min: 30      # 30-80% = Moderately utilized
+  moderately_utilized_max: 80
+  highly_utilized_min: 80          # > 80% = Highly utilized
+  
+  # Cost Waste Thresholds
+  significant_waste_threshold: 0.70    # 70% waste
+  moderate_waste_threshold: 0.40       # 40% waste
+
+# Data Retention Policies
+data_retention:
+  # Query Performance Data
+  query_performance_raw_days: 90       # Detailed query data
+  query_patterns_days: 365             # Pattern analysis data
+  optimization_tracking_days: 730      # Optimization impact tracking (2 years)
+  performance_baselines_days: 365      # Performance baselines
+  etl_log_days: 30                     # ETL execution logs
+  
+  # Materialized View Refresh
+  materialized_view_refresh_hours: 1   # Refresh every hour
+  
+  # Archive Settings
+  archive_enabled: true
+  archive_storage_location: "s3://your-bucket/databricks-query-optimizer/archive/"
+
+# ETL Configuration
+etl:
+  # Processing Windows
+  incremental_window_hours: 1          # Process last 1 hour of data
+  backfill_window_days: 7              # Backfill up to 7 days
+  
+  # Retry Configuration
+  max_retry_attempts: 3
+  retry_delay_seconds: 30
+  exponential_backoff: true
+  
+  # Performance Settings
+  batch_size: 10000                    # Records per batch
+  parallelism: 4                       # Parallel processing threads
+  
+  # Data Quality
+  data_quality_checks_enabled: true
+  fail_on_data_quality_issues: true
+  
+  # Scheduling
+  default_schedule: "0 */1 * * *"      # Every hour
+  baseline_update_schedule: "0 2 * * 0"  # Weekly on Sunday at 2 AM
+
+# System Integration
+system_tables:
+  # Required System Tables
+  required_tables:
+    - "system.query.history"
+    - "system.billing.usage"
+    - "system.billing.list_prices"
+    - "system.compute.clusters"
+    - "system.compute.warehouses"
+    - "system.lakeflow.jobs"
+    - "system.lakeflow.pipelines"
+    - "system.compute.cluster_events"
+    - "system.storage.table_lineage"
+    - "system.access.audit"
+  
+  # Access Validation
+  validate_access_on_startup: true
+  access_check_timeout_seconds: 30
+
+# Performance Tuning
+performance:
+  # Delta Lake Configuration
+  delta_lake:
+    auto_optimize_enabled: true
+    auto_compact_enabled: true
+    optimize_write_enabled: true
+    data_skipping_enabled: true
+  
+  # Liquid Clustering
+  liquid_clustering:
+    enabled: true
+    # Clustering keys for each table
+    query_performance_raw: ["query_date", "workspace_id"]
+    query_patterns: ["DATE(last_seen)"]
+    optimization_tracking: ["implementation_date", "workspace_id"]
+    performance_baselines: ["baseline_period_start", "workspace_id"]
+  
+  # Query Optimization
+  query_optimization:
+    enable_adaptive_query_execution: true
+    enable_dynamic_partition_pruning: true
+    broadcast_threshold: "10MB"
+    sql_adaptive_coalesce_partitions_enabled: true
+
+# Security Configuration
+security:
+  # Access Control
+  access_control:
+    enable_workspace_isolation: true
+    enable_user_data_filtering: true
+    
+  # Data Masking (for sensitive query text)
+  data_masking:
+    enabled: true
+    mask_patterns:
+      - "password\\s*=\\s*['\"][^'\"]*['\"]"
+      - "secret\\s*=\\s*['\"][^'\"]*['\"]"
+      - "token\\s*=\\s*['\"][^'\"]*['\"]"
+    replacement_text: "***MASKED***"
+
+# Business Context
+business_context:
+  # Cost Targets
+  cost_reduction_target_percent: 20    # Target 20% cost reduction
+  efficiency_improvement_target: 25    # Target 25% efficiency improvement
+  
+  # Time Zones
+  default_timezone: "UTC"
+  business_hours_start: 8              # 8 AM
+  business_hours_end: 18               # 6 PM
+  
+  # Reporting
+  executive_reporting_day: "monday"    # Weekly exec reports on Monday
+  detailed_reporting_frequency: "daily"
+
+# Environment Configuration
+environment:
+  # Deployment Environment
+  deployment_env: "production"         # production, staging, development
+  
+  # Logging
+  log_level: "INFO"                    # DEBUG, INFO, WARNING, ERROR
+  enable_detailed_logging: false
+  
+  # Resource Limits
+  max_concurrent_jobs: 10
+  query_timeout_seconds: 3600         # 1 hour max query time
+  
+  # Monitoring
+  enable_metrics_collection: true
+  metrics_retention_days: 30
+
+# Notification Configuration
+notifications:
+  # Channels
+  channels:
+    email:
+      enabled: true
+      smtp_server: "smtp.company.com"
+      from_address: "databricks-alerts@company.com"
+    
+    slack:
+      enabled: false
+      webhook_url: ""
+      default_channel: "#databricks-alerts"
+    
+    teams:
+      enabled: false
+      webhook_url: ""
+  
+  # Notification Rules
+  rules:
+    critical_alerts:
+      channels: ["email", "slack"]
+      escalation_minutes: 15
+    
+    high_alerts:
+      channels: ["email"]
+      escalation_minutes: 60
+    
+    medium_alerts:
+      channels: ["email"]
+      escalation_minutes: 240
+
+# Feature Flags
+feature_flags:
+  enable_real_time_alerting: true
+  enable_auto_optimization: false      # Future feature
+  enable_cost_forecasting: true
+  enable_ml_recommendations: false     # Future feature
+  enable_query_rewrite_suggestions: true
+  enable_resource_rightsizing: true
+
+# Version Control
+version_info:
+  config_version: "2.0.0"
+  last_updated: "2024-07-16"
+  last_updated_by: "claude-code"
+  compatibility:
+    min_databricks_runtime: "13.0"
+    min_delta_version: "2.4"
+    min_spark_version: "3.4"
