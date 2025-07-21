@@ -30,7 +30,7 @@ CREATE TABLE hourly_performance
     success_rate DECIMAL(10,4),
     avg_complexity_score DOUBLE,
     avg_optimization_score DOUBLE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+    created_at TIMESTAMP
 )
 USING DELTA
 PARTITIONED BY (query_date)
@@ -62,7 +62,7 @@ CREATE TABLE daily_performance
     cost_per_second DOUBLE,
     bytes_per_second DOUBLE,
     avg_optimization_score DOUBLE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+    created_at TIMESTAMP
 )
 USING DELTA
 PARTITIONED BY (query_date)
@@ -95,7 +95,7 @@ CREATE TABLE pattern_performance
     estimated_monthly_savings_dbu DOUBLE,
     first_seen TIMESTAMP,
     last_seen TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+    created_at TIMESTAMP
 )
 USING DELTA
 PARTITIONED BY (pattern_type)
@@ -128,7 +128,7 @@ CREATE TABLE user_performance
     optimization_opportunity_score INT,
     first_query TIMESTAMP,
     last_query TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+    created_at TIMESTAMP
 )
 USING DELTA
 PARTITIONED BY (workspace_id)
@@ -148,7 +148,7 @@ CREATE TABLE performance_alerts
     large_scan_queries BIGINT,
     total_alerts BIGINT,
     avg_severity_score DOUBLE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+    created_at TIMESTAMP
 )
 USING DELTA
 PARTITIONED BY (alert_date)
@@ -175,7 +175,7 @@ CREATE TABLE query_performance_categorized
     performance_category STRING,
     bytes_per_row_efficiency DOUBLE,
     optimization_flag STRING,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+    created_at TIMESTAMP
 )
 USING DELTA
 PARTITIONED BY (DATE(end_time))
@@ -194,7 +194,7 @@ CREATE TABLE current_slow_queries
     suggested_optimization STRING,
     first_seen TIMESTAMP,
     occurrence_count BIGINT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+    created_at TIMESTAMP
 )
 USING DELTA
 PARTITIONED BY (DATE(first_seen))
@@ -213,7 +213,7 @@ CREATE TABLE resource_utilization_alerts
     cache_hit_ratio DOUBLE,
     alert_level STRING,
     bottleneck_type STRING,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
+    created_at TIMESTAMP
 )
 USING DELTA
 PARTITIONED BY (DATE(time_window))

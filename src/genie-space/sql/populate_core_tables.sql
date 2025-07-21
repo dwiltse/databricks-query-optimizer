@@ -10,18 +10,18 @@ USE mcp.query_optimization;
 
 INSERT OVERWRITE query_performance_raw
 SELECT 
-    query_id,
+    statement_id as query_id,
     workspace_id,
     executed_by_user_id as user_id,
-    executed_by as user_email,
-    query_text,
+    executed_by as user_email,  -- Using executed_by instead of executed_as
+    statement_text as query_text,
     -- Calculate query hash inline (no functions in Databricks SQL)
     SHA2(
         REGEXP_REPLACE(
             REGEXP_REPLACE(
                 REGEXP_REPLACE(
                     REGEXP_REPLACE(
-                        UPPER(TRIM(query_text)),
+                        UPPER(TRIM(statement_text)),
                         '[0-9]+', 'N'  -- Replace numbers with N
                     ),
                     '\'[^\']*\'', 'S'  -- Replace string literals with S
@@ -32,7 +32,7 @@ SELECT
         ),
         256
     ) as query_hash,
-    created_time as start_time,
+    start_time,  -- Actual field exists!
     end_time,
     total_duration_ms as duration_ms,
     read_rows as rows_read,
@@ -46,46 +46,46 @@ SELECT
     compute.warehouse_id as warehouse_id,
     -- Extract query type from query text
     CASE 
-        WHEN UPPER(TRIM(query_text)) LIKE 'SELECT%' THEN 'SELECT'
-        WHEN UPPER(TRIM(query_text)) LIKE 'INSERT%' THEN 'INSERT'
-        WHEN UPPER(TRIM(query_text)) LIKE 'UPDATE%' THEN 'UPDATE'
-        WHEN UPPER(TRIM(query_text)) LIKE 'DELETE%' THEN 'DELETE'
-        WHEN UPPER(TRIM(query_text)) LIKE 'CREATE%' THEN 'CREATE'
-        WHEN UPPER(TRIM(query_text)) LIKE 'ALTER%' THEN 'ALTER'
-        WHEN UPPER(TRIM(query_text)) LIKE 'DROP%' THEN 'DROP'
-        WHEN UPPER(TRIM(query_text)) LIKE 'MERGE%' THEN 'MERGE'
-        WHEN UPPER(TRIM(query_text)) LIKE 'COPY%' THEN 'COPY'
+        WHEN UPPER(TRIM(statement_text)) LIKE 'SELECT%' THEN 'SELECT'
+        WHEN UPPER(TRIM(statement_text)) LIKE 'INSERT%' THEN 'INSERT'
+        WHEN UPPER(TRIM(statement_text)) LIKE 'UPDATE%' THEN 'UPDATE'
+        WHEN UPPER(TRIM(statement_text)) LIKE 'DELETE%' THEN 'DELETE'
+        WHEN UPPER(TRIM(statement_text)) LIKE 'CREATE%' THEN 'CREATE'
+        WHEN UPPER(TRIM(statement_text)) LIKE 'ALTER%' THEN 'ALTER'
+        WHEN UPPER(TRIM(statement_text)) LIKE 'DROP%' THEN 'DROP'
+        WHEN UPPER(TRIM(statement_text)) LIKE 'MERGE%' THEN 'MERGE'
+        WHEN UPPER(TRIM(statement_text)) LIKE 'COPY%' THEN 'COPY'
         ELSE 'OTHER'
     END as query_type,
     -- Calculate complexity score inline (1-10)
     LEAST(10, GREATEST(1, 
         1 + 
-        ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'SELECT', ''))) / 6) * 0.5 +
-        ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'JOIN', ''))) / 4) * 1.0 +
-        ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'WHERE', ''))) / 5) * 0.3 +
-        ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'GROUP BY', ''))) / 8) * 0.8 +
-        ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'ORDER BY', ''))) / 8) * 0.6 +
-        (LENGTH(query_text) / 1000) * 0.1
+        ((LENGTH(statement_text) - LENGTH(REPLACE(UPPER(statement_text), 'SELECT', ''))) / 6) * 0.5 +
+        ((LENGTH(statement_text) - LENGTH(REPLACE(UPPER(statement_text), 'JOIN', ''))) / 4) * 1.0 +
+        ((LENGTH(statement_text) - LENGTH(REPLACE(UPPER(statement_text), 'WHERE', ''))) / 5) * 0.3 +
+        ((LENGTH(statement_text) - LENGTH(REPLACE(UPPER(statement_text), 'GROUP BY', ''))) / 8) * 0.8 +
+        ((LENGTH(statement_text) - LENGTH(REPLACE(UPPER(statement_text), 'ORDER BY', ''))) / 8) * 0.6 +
+        (LENGTH(statement_text) / 1000) * 0.1
     )) as complexity_score,
     -- Calculate optimization score inline (1-10, higher is better)
     LEAST(10, GREATEST(1,
         10 -
         -- Penalty for inefficient patterns
-        (CASE WHEN UPPER(query_text) LIKE '%SELECT *%' THEN 2 ELSE 0 END) -
-        (CASE WHEN UPPER(query_text) LIKE '%ORDER BY%' AND UPPER(query_text) NOT LIKE '%LIMIT%' THEN 3 ELSE 0 END) -
-        (CASE WHEN UPPER(query_text) LIKE '%JOIN%' AND UPPER(query_text) NOT LIKE '%ON%' THEN 4 ELSE 0 END) -
-        (CASE WHEN UPPER(query_text) LIKE '%DISTINCT%' AND UPPER(query_text) LIKE '%GROUP BY%' THEN 1 ELSE 0 END) -
+        (CASE WHEN UPPER(statement_text) LIKE '%SELECT *%' THEN 2 ELSE 0 END) -
+        (CASE WHEN UPPER(statement_text) LIKE '%ORDER BY%' AND UPPER(statement_text) NOT LIKE '%LIMIT%' THEN 3 ELSE 0 END) -
+        (CASE WHEN UPPER(statement_text) LIKE '%JOIN%' AND UPPER(statement_text) NOT LIKE '%ON%' THEN 4 ELSE 0 END) -
+        (CASE WHEN UPPER(statement_text) LIKE '%DISTINCT%' AND UPPER(statement_text) LIKE '%GROUP BY%' THEN 1 ELSE 0 END) -
         -- Penalty for performance issues
         (CASE WHEN total_duration_ms > 300000 THEN 2 ELSE 0 END) -
         (CASE WHEN read_bytes > 5368709120 THEN 1 ELSE 0 END) -
         -- Penalty for very long queries
-        (CASE WHEN LENGTH(query_text) > 10000 THEN 1 ELSE 0 END)
+        (CASE WHEN LENGTH(statement_text) > 10000 THEN 1 ELSE 0 END)
     )) as optimization_score,
-    CURRENT_TIMESTAMP() as created_at,
-    CURRENT_TIMESTAMP() as updated_at
+    CURRENT_TIMESTAMP as created_at,
+    CURRENT_TIMESTAMP as updated_at
 FROM system.query.history
-WHERE created_time >= CURRENT_DATE() - INTERVAL 30 DAYS
-    AND query_text IS NOT NULL
+WHERE start_time >= CURRENT_DATE() - INTERVAL 30 DAYS
+    AND statement_text IS NOT NULL
     AND total_duration_ms IS NOT NULL
     AND execution_status = 'FINISHED';
 
@@ -155,8 +155,8 @@ SELECT
         WHEN AVG(compute_cost_dbu) > 20 THEN 'Optimize data access patterns and consider caching'
         ELSE 'Review for general optimization opportunities'
     END as optimization_recommendations,
-    CURRENT_TIMESTAMP() as created_at,
-    CURRENT_TIMESTAMP() as updated_at
+    CURRENT_TIMESTAMP as created_at,
+    CURRENT_TIMESTAMP as updated_at
 FROM query_performance_raw
 WHERE execution_status = 'FINISHED'
 GROUP BY query_hash, query_text, query_type
@@ -188,8 +188,8 @@ SELECT
     -- Set thresholds at 2x the 95th percentile
     percentile_approx(duration_ms, 0.95) * 2 as threshold_duration_ms,
     percentile_approx(compute_cost_dbu, 0.95) * 2 as threshold_cost_dbu,
-    CURRENT_TIMESTAMP() as created_at,
-    CURRENT_TIMESTAMP() as updated_at
+    CURRENT_TIMESTAMP as created_at,
+    CURRENT_TIMESTAMP as updated_at
 FROM query_performance_raw
 WHERE execution_status IN ('FINISHED', 'FAILED')
 GROUP BY query_hash, workspace_id, user_id

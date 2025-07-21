@@ -476,8 +476,7 @@ CREATE TABLE IF NOT EXISTS etl_log (
   message STRING,
   records_processed BIGINT,
   error_message STRING,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP()
-)
+  created_at TIMESTAMP )
 USING DELTA
 PARTITIONED BY (DATE(start_time))
 COMMENT 'ETL process logging for monitoring and debugging';
