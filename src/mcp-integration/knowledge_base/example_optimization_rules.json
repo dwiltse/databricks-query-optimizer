@@ -1,0 +1,146 @@
+[
+  {
+    "rule_id": "sel001",
+    "title": "Avoid SELECT * in Production Queries",
+    "description": "SELECT * statements read all columns from tables, which can be inefficient when only specific columns are needed. This leads to increased I/O, memory usage, and network transfer, especially with wide tables containing many columns or large data types like strings and binary data.",
+    "query_pattern": "SELECT * FROM schema.table",
+    "optimization_type": "performance",
+    "before_example": "SELECT * FROM sales_data WHERE region = 'US' AND date >= '2024-01-01'",
+    "after_example": "SELECT customer_id, product_name, sales_amount, order_date FROM sales_data WHERE region = 'US' AND date >= '2024-01-01'",
+    "expected_improvement": "30-50% reduction in data transfer and memory usage",
+    "conditions": [
+      "when table has many columns",
+      "when only specific columns are needed for analysis",
+      "when query processes large datasets"
+    ],
+    "source_document": "databricks_sql_optimization_guide.pdf",
+    "page_number": 15,
+    "confidence_score": 0.9
+  },
+  {
+    "rule_id": "part001", 
+    "title": "Use Partition Pruning for Large Tables",
+    "description": "Partition pruning allows queries to skip reading entire partitions when filters match partition columns. This dramatically reduces the amount of data scanned and improves query performance, especially for time-series data partitioned by date.",
+    "query_pattern": "SELECT ... FROM partitioned_table WHERE non_partition_column = ...",
+    "optimization_type": "performance",
+    "before_example": "SELECT * FROM event_logs WHERE user_id = '12345' AND event_type = 'click'",
+    "after_example": "SELECT * FROM event_logs WHERE date = '2024-01-15' AND user_id = '12345' AND event_type = 'click'",
+    "expected_improvement": "70-90% reduction in data scanned",
+    "conditions": [
+      "when querying partitioned tables",
+      "when partition columns are available for filtering",
+      "when scanning time-series or date-based data"
+    ],
+    "source_document": "delta_lake_performance_guide.pdf",
+    "page_number": 23,
+    "confidence_score": 0.95
+  },
+  {
+    "rule_id": "join001",
+    "title": "Optimize JOIN Order for Performance", 
+    "description": "Join order significantly impacts performance. Place the smallest table first in the join sequence, and use broadcast joins for small dimension tables. The Databricks optimizer can automatically optimize joins, but explicit hints can help with complex queries.",
+    "query_pattern": "SELECT ... FROM large_table JOIN small_table ON ...",
+    "optimization_type": "performance",
+    "before_example": "SELECT l.*, s.name FROM large_fact_table l JOIN small_dim_table s ON l.dim_id = s.id",
+    "after_example": "SELECT /*+ BROADCAST(s) */ l.*, s.name FROM large_fact_table l JOIN small_dim_table s ON l.dim_id = s.id",
+    "expected_improvement": "40-60% faster join execution",
+    "conditions": [
+      "when joining tables of significantly different sizes", 
+      "when dimension tables are small enough for broadcast",
+      "when experiencing slow join performance"
+    ],
+    "source_document": "spark_sql_optimization_cookbook.pdf",
+    "page_number": 45,
+    "confidence_score": 0.85
+  },
+  {
+    "rule_id": "cache001",
+    "title": "Cache Frequently Accessed Tables",
+    "description": "Caching stores table data in memory for faster access on subsequent queries. This is particularly effective for reference data, dimension tables, or datasets that are accessed multiple times within a session or across multiple queries.",
+    "query_pattern": "SELECT ... FROM frequently_used_table",
+    "optimization_type": "performance", 
+    "before_example": "-- Multiple queries against the same table\nSELECT COUNT(*) FROM product_catalog;\nSELECT * FROM product_catalog WHERE category = 'Electronics';",
+    "after_example": "CACHE TABLE product_catalog;\n-- Now subsequent queries are much faster\nSELECT COUNT(*) FROM product_catalog;\nSELECT * FROM product_catalog WHERE category = 'Electronics';",
+    "expected_improvement": "2-10x faster query execution for cached data",
+    "conditions": [
+      "when table is accessed multiple times",
+      "when table is relatively small (fits in cluster memory)",
+      "when table data doesn't change frequently"
+    ],
+    "source_document": "databricks_performance_tuning.pdf",
+    "page_number": 67,
+    "confidence_score": 0.8
+  },
+  {
+    "rule_id": "cost001",
+    "title": "Replace UNION with UNION ALL When Possible",
+    "description": "UNION performs duplicate elimination which requires additional processing and memory. UNION ALL simply concatenates results without deduplication, making it much faster and less resource-intensive when duplicates are not a concern.",
+    "query_pattern": "SELECT ... UNION SELECT ...",
+    "optimization_type": "cost",
+    "before_example": "SELECT customer_id, order_date FROM orders_2023 UNION SELECT customer_id, order_date FROM orders_2024",
+    "after_example": "SELECT customer_id, order_date FROM orders_2023 UNION ALL SELECT customer_id, order_date FROM orders_2024",
+    "expected_improvement": "15-30% reduction in execution time and DBU usage",
+    "conditions": [
+      "when duplicate rows are acceptable in results",
+      "when you know the datasets don't have overlapping data", 
+      "when processing large datasets with UNION operations"
+    ],
+    "source_document": "sql_cost_optimization_guide.pdf",
+    "page_number": 12,
+    "confidence_score": 0.9
+  },
+  {
+    "rule_id": "limit001",
+    "title": "Add LIMIT Clauses to Exploratory Queries",
+    "description": "Exploratory queries without LIMIT clauses can process entire datasets unnecessarily. Adding LIMIT significantly reduces execution time and cost, especially during development and data exploration phases.",
+    "query_pattern": "SELECT ... FROM large_table ORDER BY ...",
+    "optimization_type": "cost",
+    "before_example": "SELECT * FROM transaction_logs ORDER BY timestamp DESC",
+    "after_example": "SELECT * FROM transaction_logs ORDER BY timestamp DESC LIMIT 1000",
+    "expected_improvement": "50-90% reduction in data processed and execution time",
+    "conditions": [
+      "when exploring data or developing queries",
+      "when full dataset results are not needed",
+      "when using ORDER BY without LIMIT"
+    ],
+    "source_document": "databricks_cost_management.pdf", 
+    "page_number": 8,
+    "confidence_score": 0.95
+  },
+  {
+    "rule_id": "agg001",
+    "title": "Pre-aggregate Data for Repeated Analytics",
+    "description": "Instead of running the same aggregation queries repeatedly, create materialized views or pre-aggregated tables. This reduces computation costs and improves query performance for common analytical patterns.",
+    "query_pattern": "SELECT date, SUM(...), COUNT(...) FROM large_table GROUP BY date",
+    "optimization_type": "cost",
+    "before_example": "-- This query runs daily and processes the entire fact table each time\nSELECT DATE(order_timestamp) as order_date, SUM(amount) as daily_sales, COUNT(*) as order_count FROM orders GROUP BY DATE(order_timestamp)",
+    "after_example": "-- Create materialized view for daily aggregations\nCREATE MATERIALIZED VIEW daily_sales_summary AS SELECT DATE(order_timestamp) as order_date, SUM(amount) as daily_sales, COUNT(*) as order_count FROM orders GROUP BY DATE(order_timestamp);\n-- Now use the pre-aggregated data\nSELECT * FROM daily_sales_summary WHERE order_date >= '2024-01-01'",
+    "expected_improvement": "60-80% reduction in compute costs for repeated queries",
+    "conditions": [
+      "when running the same aggregation queries regularly",
+      "when source data doesn't change frequently",
+      "when aggregation results are used by multiple users or dashboards"
+    ],
+    "source_document": "materialized_views_best_practices.pdf",
+    "page_number": 34,
+    "confidence_score": 0.85
+  },
+  {
+    "rule_id": "err001",
+    "title": "Handle NULL Values Explicitly in Comparisons",
+    "description": "NULL values in comparisons can cause unexpected results and query failures. Explicitly handling NULLs with IS NULL/IS NOT NULL or COALESCE functions ensures reliable query behavior and prevents runtime errors.",
+    "query_pattern": "SELECT ... WHERE column = value",
+    "optimization_type": "reliability",
+    "before_example": "SELECT * FROM customers WHERE phone = '555-1234'",
+    "after_example": "SELECT * FROM customers WHERE phone = '555-1234' OR (phone IS NULL AND '555-1234' IS NULL)",
+    "expected_improvement": "Eliminates unexpected NULL-related query behavior",
+    "conditions": [
+      "when columns may contain NULL values",
+      "when experiencing unexpected filtering results",
+      "when queries fail due to NULL comparisons"
+    ],
+    "source_document": "sql_reliability_patterns.pdf",
+    "page_number": 19,
+    "confidence_score": 0.75
+  }
+]
