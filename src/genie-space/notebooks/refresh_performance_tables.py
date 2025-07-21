@@ -74,7 +74,7 @@ def validate_data_quality(df, table_name, expected_min_rows=1):
     ]).collect()[0]
     
     for col_name, null_count in null_checks.asDict().items():
-        if null_count > row_count * 0.1:  # More than 10% nulls
+        if null_count is not None and null_count > row_count * 0.1:  # More than 10% nulls
             log_error(f"{table_name}: High null rate in {col_name}: {null_count}/{row_count}")
     
     log_info(f"{table_name}: Data quality check passed - {row_count} rows processed")
