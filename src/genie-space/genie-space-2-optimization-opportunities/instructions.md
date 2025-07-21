@@ -43,28 +43,35 @@ This Genie Space helps identify, prioritize, and track SQL query optimization op
   - `actual_savings_pct` - Realized savings percentage
   - `status` - Implementation status ('completed', 'in_progress', 'planned')
 
-#### 3. `mcp.query_optimization.mv_pattern_performance` (Materialized View)
+#### 3. `mcp.query_optimization.pattern_performance` (Delta Table)
 **What it contains**: Pre-aggregated performance metrics by pattern type for fast analysis
 - **Key Columns**:
+  - `query_hash` - Links to query_patterns table
   - `pattern_type` - Optimization opportunity category
+  - `pattern_description` - Description of the optimization opportunity
   - `workspace_id` - Workspace identifier
-  - `total_executions` - Total times this pattern has been executed
+  - `execution_count` - Total times this pattern has been executed
   - `total_cost_dbu` - Total DBU cost for this pattern
   - `avg_duration_ms` - Average execution time
-  - `potential_monthly_savings` - Estimated monthly savings if optimized
-  - `affected_users` - Number of users with this pattern
+  - `estimated_monthly_savings_dbu` - Estimated monthly savings if optimized
+  - `unique_users` - Number of users with this pattern
   - `last_seen` - Most recent occurrence
+  - `optimization_priority` - HIGH/MEDIUM/LOW based on savings potential
 
-#### 4. `mcp.query_optimization.mv_user_performance` (Materialized View)
+#### 4. `mcp.query_optimization.user_performance` (Delta Table)
 **What it contains**: User-specific optimization opportunities and performance metrics
 - **Key Columns**:
   - `user_id` - User identifier
+  - `user_email` - User email address
   - `workspace_id` - Workspace identifier
   - `total_queries` - Total queries executed by user
-  - `optimization_opportunities` - Number of optimization opportunities
-  - `potential_savings_dbu` - Potential DBU savings for this user
-  - `avg_optimization_score` - Average optimization score (1-10, lower = more opportunities)
-  - `most_common_pattern` - Most frequent anti-pattern for this user
+  - `unique_patterns` - Number of unique query patterns
+  - `avg_optimization_score` - Average optimization score (1-10, higher = better optimized)
+  - `optimization_opportunity_score` - Optimization potential (1-10, higher = more opportunities)
+  - `total_cost_dbu` - Total DBU cost for this user
+  - `slow_queries` - Number of SLOW queries (>300s)
+  - `medium_queries` - Number of MODERATE queries (60-300s)
+  - `fast_queries` - Number of FAST queries (<60s)
   - `last_query` - Most recent query execution
 
 #### 5. `system.billing.usage` (Raw System Table)
@@ -88,9 +95,9 @@ query_patterns.query_hash → query_performance_raw.query_hash
 query_patterns.query_hash → optimization_tracking.query_hash
 query_patterns.workspace_id → optimization_tracking.workspace_id
 
--- User Performance to Patterns
-mv_user_performance.user_id → query_patterns.user_id (through query_performance_raw)
-mv_user_performance.workspace_id → query_patterns.workspace_id
+-- User Performance to Patterns  
+user_performance.user_id → query_patterns.user_id (through query_performance_raw)
+user_performance.workspace_id → query_patterns.workspace_id
 
 -- Billing Integration
 system.billing.usage.workspace_id → query_patterns.workspace_id
@@ -148,7 +155,7 @@ SELECT
     SUM(potential_monthly_savings) as total_potential_savings,
     AVG(avg_cost_dbu) as avg_cost_per_execution,
     COUNT(DISTINCT workspace_id) as affected_workspaces
-FROM mcp.query_optimization.mv_pattern_performance
+FROM mcp.query_optimization.pattern_performance
 WHERE last_seen >= CURRENT_DATE - INTERVAL 30 DAY
 GROUP BY pattern_type
 ORDER BY total_potential_savings DESC
@@ -164,7 +171,7 @@ SELECT
     u.most_common_pattern,
     p.pattern_type,
     p.estimated_savings_pct
-FROM mcp.query_optimization.mv_user_performance u
+FROM mcp.query_optimization.user_performance u
 JOIN mcp.query_optimization.query_patterns p 
     ON u.user_id = p.user_id 
     AND u.workspace_id = p.workspace_id
@@ -218,10 +225,10 @@ ORDER BY total_pattern_cost DESC
 - Priority score = `potential_monthly_savings / implementation_effort_hours`
 
 ### Data Freshness Expectations
-- `query_patterns`: Updated hourly with new query analysis
+- `query_patterns`: Updated daily via populate_core_tables.sql
 - `optimization_tracking`: Updated when optimizations are implemented
-- `mv_pattern_performance`: Refreshed every hour
-- `mv_user_performance`: Refreshed every hour
+- `pattern_performance`: Refreshed every 15 minutes via refresh_performance_tables.py notebook
+- `user_performance`: Refreshed every 15 minutes via refresh_performance_tables.py notebook  
 - `system.billing.usage`: Updated daily with billing data
 
 ## Common Analysis Patterns
