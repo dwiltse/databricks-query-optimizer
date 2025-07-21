@@ -5,133 +5,89 @@
 USE mcp.query_optimization;
 
 -- =============================================================================
--- Helper Functions (reusable logic)
--- =============================================================================
-
--- Calculate query hash for pattern matching
-CREATE OR REPLACE FUNCTION calculate_query_hash(query_text STRING)
-RETURNS STRING
-LANGUAGE SQL
-DETERMINISTIC
-COMMENT 'Calculate hash for query pattern matching'
-AS
-$$
-  SELECT SHA2(
-    REGEXP_REPLACE(
-      REGEXP_REPLACE(
-        REGEXP_REPLACE(
-          REGEXP_REPLACE(
-            REGEXP_REPLACE(
-              UPPER(TRIM(query_text)),
-              '[0-9]+', 'N'  -- Replace numbers with N
-            ),
-            '\'[^\']*\'', 'S'  -- Replace string literals with S
-          ),
-          '\\s+', ' '  -- Normalize whitespace
-        ),
-        '--[^\n]*\n', ' '  -- Remove single-line comments
-      ),
-      '/\\*.*?\\*/', ' '  -- Remove multi-line comments
-    ),
-    256
-  )
-$$;
-
--- Calculate query complexity score (1-10)
-CREATE OR REPLACE FUNCTION calculate_complexity_score(query_text STRING)
-RETURNS DECIMAL(5,2)
-LANGUAGE SQL
-DETERMINISTIC
-COMMENT 'Calculate query complexity score (1-10)'
-AS
-$$
-  SELECT LEAST(10, GREATEST(1, 
-    1 + 
-    ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'SELECT', ''))) / 6) * 0.5 +
-    ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'JOIN', ''))) / 4) * 1.0 +
-    ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'WHERE', ''))) / 5) * 0.3 +
-    ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'GROUP BY', ''))) / 8) * 0.8 +
-    ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'ORDER BY', ''))) / 8) * 0.6 +
-    ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'UNION', ''))) / 5) * 0.7 +
-    ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'WINDOW', ''))) / 6) * 0.9 +
-    (LENGTH(query_text) / 1000) * 0.1
-  ))
-$$;
-
--- Calculate optimization score (1-10, higher is better)
-CREATE OR REPLACE FUNCTION calculate_optimization_score(query_text STRING, duration_ms BIGINT, bytes_read BIGINT)
-RETURNS DECIMAL(5,2)
-LANGUAGE SQL
-DETERMINISTIC
-COMMENT 'Calculate query optimization score (1-10, higher is better)'
-AS
-$$
-  SELECT 
-    LEAST(10, GREATEST(1,
-      10 -
-      -- Penalty for inefficient patterns
-      (CASE WHEN UPPER(query_text) LIKE '%SELECT *%' THEN 2 ELSE 0 END) -
-      (CASE WHEN UPPER(query_text) LIKE '%ORDER BY%' AND UPPER(query_text) NOT LIKE '%LIMIT%' THEN 3 ELSE 0 END) -
-      (CASE WHEN UPPER(query_text) LIKE '%JOIN%' AND UPPER(query_text) NOT LIKE '%ON%' THEN 4 ELSE 0 END) -
-      (CASE WHEN UPPER(query_text) LIKE '%WHERE%' AND UPPER(query_text) NOT LIKE '%PARTITION%' THEN 1 ELSE 0 END) -
-      (CASE WHEN UPPER(query_text) LIKE '%DISTINCT%' AND UPPER(query_text) LIKE '%GROUP BY%' THEN 1 ELSE 0 END) -
-      (CASE WHEN UPPER(query_text) LIKE '%UNION%' AND UPPER(query_text) NOT LIKE '%UNION ALL%' THEN 1 ELSE 0 END) -
-      -- Penalty for performance issues
-      (CASE WHEN duration_ms > 300000 THEN 2 ELSE 0 END) -
-      (CASE WHEN bytes_read > 5368709120 THEN 1 ELSE 0 END) -
-      -- Penalty for very long queries (complexity)
-      (CASE WHEN LENGTH(query_text) > 10000 THEN 1 ELSE 0 END)
-    ))
-$$;
-
--- =============================================================================
 -- Populate query_performance_raw (from system.query.history)
 -- =============================================================================
 
 INSERT OVERWRITE query_performance_raw
 SELECT 
-    statement_id as query_id,
+    query_id,
     workspace_id,
-    user_id,
+    executed_by_user_id as user_id,
     executed_by as user_email,
-    statement_text as query_text,
-    calculate_query_hash(statement_text) as query_hash,
-    start_time,
+    query_text,
+    -- Calculate query hash inline (no functions in Databricks SQL)
+    SHA2(
+        REGEXP_REPLACE(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        UPPER(TRIM(query_text)),
+                        '[0-9]+', 'N'  -- Replace numbers with N
+                    ),
+                    '\'[^\']*\'', 'S'  -- Replace string literals with S
+                ),
+                '\\s+', ' '  -- Normalize whitespace
+            ),
+            '--[^\n]*', ' '  -- Remove comments
+        ),
+        256
+    ) as query_hash,
+    created_time as start_time,
     end_time,
-    execution_duration_ms as duration_ms,
+    total_duration_ms as duration_ms,
     read_rows as rows_read,
     read_bytes as bytes_read,
-    produced_rows as rows_produced,
-    -- Approximate compute cost (you may need to adjust this calculation)
-    CAST(execution_duration_ms AS DOUBLE) / 3600000 * 2.5 as compute_cost_dbu,
-    CASE 
-        WHEN error_message IS NULL THEN 'FINISHED'
-        ELSE 'FAILED'
-    END as execution_status,
+    0 as rows_produced,  -- Not available in system.query.history
+    -- Approximate compute cost (basic estimation)
+    CAST(total_duration_ms AS DOUBLE) / 3600000 * 2.5 as compute_cost_dbu,
+    execution_status,
     error_message,
     compute.cluster_id as cluster_id,
     compute.warehouse_id as warehouse_id,
     -- Extract query type from query text
     CASE 
-        WHEN UPPER(TRIM(statement_text)) LIKE 'SELECT%' THEN 'SELECT'
-        WHEN UPPER(TRIM(statement_text)) LIKE 'INSERT%' THEN 'INSERT'
-        WHEN UPPER(TRIM(statement_text)) LIKE 'UPDATE%' THEN 'UPDATE'
-        WHEN UPPER(TRIM(statement_text)) LIKE 'DELETE%' THEN 'DELETE'
-        WHEN UPPER(TRIM(statement_text)) LIKE 'CREATE%' THEN 'CREATE'
-        WHEN UPPER(TRIM(statement_text)) LIKE 'ALTER%' THEN 'ALTER'
-        WHEN UPPER(TRIM(statement_text)) LIKE 'DROP%' THEN 'DROP'
-        WHEN UPPER(TRIM(statement_text)) LIKE 'MERGE%' THEN 'MERGE'
-        WHEN UPPER(TRIM(statement_text)) LIKE 'COPY%' THEN 'COPY'
+        WHEN UPPER(TRIM(query_text)) LIKE 'SELECT%' THEN 'SELECT'
+        WHEN UPPER(TRIM(query_text)) LIKE 'INSERT%' THEN 'INSERT'
+        WHEN UPPER(TRIM(query_text)) LIKE 'UPDATE%' THEN 'UPDATE'
+        WHEN UPPER(TRIM(query_text)) LIKE 'DELETE%' THEN 'DELETE'
+        WHEN UPPER(TRIM(query_text)) LIKE 'CREATE%' THEN 'CREATE'
+        WHEN UPPER(TRIM(query_text)) LIKE 'ALTER%' THEN 'ALTER'
+        WHEN UPPER(TRIM(query_text)) LIKE 'DROP%' THEN 'DROP'
+        WHEN UPPER(TRIM(query_text)) LIKE 'MERGE%' THEN 'MERGE'
+        WHEN UPPER(TRIM(query_text)) LIKE 'COPY%' THEN 'COPY'
         ELSE 'OTHER'
     END as query_type,
-    calculate_complexity_score(statement_text) as complexity_score,
-    calculate_optimization_score(statement_text, execution_duration_ms, read_bytes) as optimization_score,
+    -- Calculate complexity score inline (1-10)
+    LEAST(10, GREATEST(1, 
+        1 + 
+        ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'SELECT', ''))) / 6) * 0.5 +
+        ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'JOIN', ''))) / 4) * 1.0 +
+        ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'WHERE', ''))) / 5) * 0.3 +
+        ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'GROUP BY', ''))) / 8) * 0.8 +
+        ((LENGTH(query_text) - LENGTH(REPLACE(UPPER(query_text), 'ORDER BY', ''))) / 8) * 0.6 +
+        (LENGTH(query_text) / 1000) * 0.1
+    )) as complexity_score,
+    -- Calculate optimization score inline (1-10, higher is better)
+    LEAST(10, GREATEST(1,
+        10 -
+        -- Penalty for inefficient patterns
+        (CASE WHEN UPPER(query_text) LIKE '%SELECT *%' THEN 2 ELSE 0 END) -
+        (CASE WHEN UPPER(query_text) LIKE '%ORDER BY%' AND UPPER(query_text) NOT LIKE '%LIMIT%' THEN 3 ELSE 0 END) -
+        (CASE WHEN UPPER(query_text) LIKE '%JOIN%' AND UPPER(query_text) NOT LIKE '%ON%' THEN 4 ELSE 0 END) -
+        (CASE WHEN UPPER(query_text) LIKE '%DISTINCT%' AND UPPER(query_text) LIKE '%GROUP BY%' THEN 1 ELSE 0 END) -
+        -- Penalty for performance issues
+        (CASE WHEN total_duration_ms > 300000 THEN 2 ELSE 0 END) -
+        (CASE WHEN read_bytes > 5368709120 THEN 1 ELSE 0 END) -
+        -- Penalty for very long queries
+        (CASE WHEN LENGTH(query_text) > 10000 THEN 1 ELSE 0 END)
+    )) as optimization_score,
     CURRENT_TIMESTAMP() as created_at,
     CURRENT_TIMESTAMP() as updated_at
 FROM system.query.history
-WHERE start_time >= CURRENT_DATE() - INTERVAL 30 DAYS
-    AND statement_text IS NOT NULL
-    AND execution_duration_ms IS NOT NULL;
+WHERE created_time >= CURRENT_DATE() - INTERVAL 30 DAYS
+    AND query_text IS NOT NULL
+    AND total_duration_ms IS NOT NULL
+    AND execution_status = 'FINISHED';
 
 -- =============================================================================
 -- Populate query_patterns (from processed raw data)
