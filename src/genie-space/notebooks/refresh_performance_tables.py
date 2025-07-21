@@ -49,7 +49,7 @@ def get_latest_timestamp(table_name, timestamp_column="end_time"):
     """Get latest timestamp from table for incremental processing"""
     try:
         latest = spark.sql(f"""
-            SELECT COALESCE(MAX({timestamp_column}), TIMESTAMP('1900-01-01 00:00:00')) as latest
+            SELECT COALESCE(MAX({timestamp_column}), CAST('1900-01-01 00:00:00' AS TIMESTAMP)) as latest
             FROM {config['catalog']}.{config['schema']}.{table_name}
         """).collect()[0]['latest']
         
@@ -120,7 +120,7 @@ def refresh_query_performance_categorized():
                 END AS performance_category,
                 -- Efficiency metric
                 CASE
-                    WHEN read_bytes > 0 AND read_rows > 0 THEN CAST(read_bytes AS DOUBLE) / CAST(read_rows AS DOUBLE)
+                    WHEN read_bytes IS NOT NULL AND read_rows IS NOT NULL AND read_bytes > 0 AND read_rows > 0 THEN CAST(read_bytes AS DOUBLE) / CAST(read_rows AS DOUBLE)
                     ELSE NULL
                 END AS bytes_per_row_efficiency,
                 -- Optimization flags
@@ -131,7 +131,7 @@ def refresh_query_performance_categorized():
                 END AS optimization_flag,
                 CURRENT_TIMESTAMP() as created_at
             FROM system.query.history
-            WHERE end_time > TIMESTAMP('{latest_timestamp}')
+            WHERE end_time > CAST('{latest_timestamp}' AS TIMESTAMP)
                 AND end_time >= CURRENT_TIMESTAMP() - INTERVAL {config['incremental_hours']} HOURS
                 AND compute.warehouse_id IS NOT NULL
                 AND execution_duration_ms IS NOT NULL
@@ -270,7 +270,7 @@ def refresh_hourly_performance():
         # Get latest hour processed
         latest_hour = spark.sql(f"""
             SELECT COALESCE(
-                MAX(TIMESTAMP(query_date, query_hour, 0, 0)),
+                MAX(MAKE_TIMESTAMP(YEAR(query_date), MONTH(query_date), DAY(query_date), query_hour, 0, 0)),
                 CURRENT_TIMESTAMP() - INTERVAL 7 DAYS
             ) as latest
             FROM {config['catalog']}.{config['schema']}.hourly_performance
@@ -302,7 +302,7 @@ def refresh_hourly_performance():
                 AVG(optimization_score) as avg_optimization_score,
                 CURRENT_TIMESTAMP() as created_at
             FROM {config['catalog']}.{config['schema']}.query_performance_raw
-            WHERE start_time > TIMESTAMP('{latest_hour}')
+            WHERE start_time > CAST('{latest_hour}' AS TIMESTAMP)
                 AND DATE_TRUNC('HOUR', start_time) < DATE_TRUNC('HOUR', CURRENT_TIMESTAMP())
             GROUP BY DATE(start_time), HOUR(start_time), workspace_id, user_id
         """)
