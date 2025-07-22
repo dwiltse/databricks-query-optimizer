@@ -1,53 +1,67 @@
+#!/usr/bin/env python3
 """
-Minimal Databricks Apps Entry Point
-Simplified version without advanced Streamlit features that cause context errors
+Query Optimization Dashboard - Databricks Apps Entry Point
+Based on working system_table_chain_of_debates pattern
 """
 
+import subprocess
+import sys
+import os
+import time
+
 def main():
-    # Import inside main to avoid context issues
-    import streamlit as st
+    """Launch the Streamlit application using the working pattern."""
+    print("=== Starting Query Optimization Dashboard ===")
+    print(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # Basic page setup
-    st.title("🚀 Query Optimization Dashboard")
-    st.write("**Status**: Testing Databricks Apps deployment")
+    # Change to the project directory
+    project_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(project_dir)
+    print(f"Working directory: {project_dir}")
     
-    # Simple connection test
-    try:
-        from databricks.sdk import WorkspaceClient
-        workspace_client = WorkspaceClient()
-        st.success("✅ Connected to Databricks workspace")
-        st.write(f"**Workspace Host**: {workspace_client.config.host}")
-    except Exception as e:
-        st.error(f"❌ Connection failed: {str(e)}")
-        st.write("This is expected if MCP libraries aren't installed")
-    
-    # Simple form without session state
-    st.header("💬 Test Query Interface")
-    
-    question = st.text_input("Ask about your queries:", 
-                            placeholder="What are the slowest queries?")
-    
-    if st.button("🔍 Test Query"):
-        if question:
-            st.write(f"**You asked**: {question}")
-            st.info("🚧 MCP integration will be added once basic deployment works")
+    # Print environment info for debugging
+    print("Environment variables:")
+    env_vars = ['DATABRICKS_TOKEN', 'DATABRICKS_ACCESS_TOKEN', 'DATABRICKS_AUTH_TOKEN']
+    for var in env_vars:
+        value = os.environ.get(var)
+        if value:
+            # Mask sensitive values
+            masked = f"{value[:4]}...{value[-4:]}" if len(value) > 8 else "***"
+            print(f"  {var}: {masked}")
         else:
-            st.warning("Please enter a question")
+            print(f"  {var}: Not set")
     
-    # Static demo data
-    st.header("📊 Sample Analytics")
+    # Verify the Streamlit app exists
+    streamlit_path = os.path.join(project_dir, 'streamlit_dashboard.py')
+    if not os.path.exists(streamlit_path):
+        print(f"ERROR: Streamlit app not found at {streamlit_path}")
+        sys.exit(1)
     
-    import pandas as pd
-    sample_data = {
-        "Query Type": ["SELECT *", "Unbounded Sort", "Cartesian Join"],
-        "Potential Savings": ["40%", "60%", "80%"], 
-        "Monthly Cost": ["$1,200", "$800", "$2,000"]
-    }
+    print(f"Found Streamlit app: {streamlit_path}")
     
-    df = pd.DataFrame(sample_data)
-    st.dataframe(df, use_container_width=True)
+    # Launch Streamlit using the working pattern - let Databricks Apps handle networking
+    cmd = [
+        sys.executable, '-m', 'streamlit', 'run', 
+        'streamlit_dashboard.py',
+        '--server.headless=true'
+    ]
     
-    st.success("🎯 Basic app is working! Ready to add MCP features.")
+    print(f"Executing: {' '.join(cmd)}")
+    print("=== Launching Streamlit ===")
+    
+    try:
+        # Use exec to replace the current process - this works in Databricks Apps
+        os.execvp(sys.executable, cmd)
+    except Exception as e:
+        print(f"ERROR launching Streamlit: {e}")
+        print("Trying fallback method...")
+        
+        # Fallback to subprocess
+        try:
+            subprocess.run(cmd, check=True)
+        except Exception as e2:
+            print(f"ERROR with fallback: {e2}")
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()
