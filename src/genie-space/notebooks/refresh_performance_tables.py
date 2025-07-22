@@ -185,7 +185,6 @@ def refresh_current_slow_queries():
             SELECT 
                 statement_id,
                 executed_by,
-                workspace_id,
                 compute.warehouse_id as warehouse_id,
                 execution_duration_ms,
                 read_bytes,
@@ -211,6 +210,8 @@ def refresh_current_slow_queries():
             WHERE execution_duration_ms > 300000  -- SLOW queries only (your business logic)
                 AND end_time >= CURRENT_TIMESTAMP - INTERVAL 4 HOURS
                 AND compute.warehouse_id IS NOT NULL
+                AND read_bytes IS NOT NULL
+                AND read_rows IS NOT NULL
         """)
         
         if validate_data_quality(slow_queries, "current_slow_queries", 0):
