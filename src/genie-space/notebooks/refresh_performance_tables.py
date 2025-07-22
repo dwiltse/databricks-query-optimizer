@@ -120,7 +120,7 @@ def refresh_query_performance_categorized():
                 END AS performance_category,
                 -- Efficiency metric
                 CASE
-                    WHEN read_bytes IS NOT NULL AND read_rows IS NOT NULL AND read_bytes > 0 AND read_rows > 0 THEN CAST(read_bytes AS DOUBLE) / CAST(read_rows AS DOUBLE)
+                    WHEN read_bytes IS NOT NULL AND read_rows IS NOT NULL AND read_bytes > 0 AND read_rows > 0 THEN COALESCE(CAST(read_bytes AS DOUBLE) / NULLIF(CAST(read_rows AS DOUBLE), 0), 0)
                     ELSE NULL
                 END AS bytes_per_row_efficiency,
                 -- Optimization flags
@@ -201,7 +201,7 @@ def refresh_current_slow_queries():
                 CASE
                     WHEN statement_text LIKE '%SELECT *%' THEN 'Replace SELECT * with specific columns'
                     WHEN statement_text LIKE '%ORDER BY%' AND statement_text NOT LIKE '%LIMIT%' THEN 'Add LIMIT clause to ORDER BY'
-                    WHEN read_rows IS NOT NULL AND read_bytes IS NOT NULL AND read_rows > 0 AND read_bytes > 0 AND read_bytes / read_rows > 100000 THEN 'Optimize data access - high bytes per row'
+                    WHEN read_rows IS NOT NULL AND read_bytes IS NOT NULL AND read_rows > 0 AND read_bytes > 0 AND COALESCE(CAST(read_bytes AS DOUBLE) / NULLIF(CAST(read_rows AS DOUBLE), 0), 0) > 100000 THEN 'Optimize data access - high bytes per row'
                     WHEN statement_text LIKE '%DISTINCT%' THEN 'Consider if DISTINCT is necessary or use GROUP BY'
                     WHEN statement_text LIKE '% FROM %,%' AND statement_text NOT LIKE '%JOIN%' THEN 'Replace cartesian join with proper JOIN'
                     ELSE 'Review query execution plan and consider indexing'
@@ -272,7 +272,7 @@ def refresh_hourly_performance():
         # Get latest hour processed
         latest_hour = spark.sql(f"""
             SELECT COALESCE(
-                MAX(CAST(CONCAT(query_date, ' ', LPAD(query_hour, 2, '0'), ':00:00') AS TIMESTAMP)),
+                MAX(DATE_ADD(query_date, INTERVAL query_hour HOURS)),
                 CURRENT_TIMESTAMP - INTERVAL 7 DAYS
             ) as latest
             FROM {config['catalog']}.{config['schema']}.hourly_performance
