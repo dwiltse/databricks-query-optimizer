@@ -185,9 +185,11 @@ def refresh_current_slow_queries():
             SELECT 
                 statement_id,
                 executed_by,
+                workspace_id,
                 compute.warehouse_id as warehouse_id,
                 execution_duration_ms,
                 read_bytes,
+                read_rows,
                 -- Performance impact score (1-10)
                 CASE 
                     WHEN execution_duration_ms > 1800000 THEN 10  -- 30+ minutes
@@ -199,7 +201,7 @@ def refresh_current_slow_queries():
                 CASE
                     WHEN statement_text LIKE '%SELECT *%' THEN 'Replace SELECT * with specific columns'
                     WHEN statement_text LIKE '%ORDER BY%' AND statement_text NOT LIKE '%LIMIT%' THEN 'Add LIMIT clause to ORDER BY'
-                    WHEN read_rows IS NOT NULL AND read_bytes IS NOT NULL AND read_rows > 0 AND CAST(read_bytes AS DOUBLE) / CAST(read_rows AS DOUBLE) > 100000 THEN 'Optimize data access - high bytes per row'
+                    WHEN read_rows IS NOT NULL AND read_bytes IS NOT NULL AND read_rows > 0 AND read_bytes > 0 AND read_bytes / read_rows > 100000 THEN 'Optimize data access - high bytes per row'
                     WHEN statement_text LIKE '%DISTINCT%' THEN 'Consider if DISTINCT is necessary or use GROUP BY'
                     WHEN statement_text LIKE '% FROM %,%' AND statement_text NOT LIKE '%JOIN%' THEN 'Replace cartesian join with proper JOIN'
                     ELSE 'Review query execution plan and consider indexing'
