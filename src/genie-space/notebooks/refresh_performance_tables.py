@@ -101,7 +101,7 @@ def refresh_query_performance_categorized():
                 statement_id,
                 statement_text,
                 executed_by,
-                executed_as,
+                executed_by,
                 total_duration_ms,
                 execution_duration_ms,
                 result_fetch_duration_ms,
@@ -129,10 +129,10 @@ def refresh_query_performance_categorized():
                     WHEN result_fetch_duration_ms > 30000 THEN 'SLOW_FETCH'
                     ELSE 'HEALTHY'
                 END AS optimization_flag,
-                CURRENT_TIMESTAMP() as created_at
+                CURRENT_TIMESTAMP as created_at
             FROM system.query.history
             WHERE end_time > CAST('{latest_timestamp}' AS TIMESTAMP)
-                AND end_time >= CURRENT_TIMESTAMP() - INTERVAL {config['incremental_hours']} HOURS
+                AND end_time >= CURRENT_TIMESTAMP - INTERVAL {config['incremental_hours']} HOURS
                 AND compute.warehouse_id IS NOT NULL
                 AND execution_duration_ms IS NOT NULL
         """)
@@ -177,7 +177,7 @@ def refresh_current_slow_queries():
         # Clean old data first (keep last 24 hours)
         spark.sql(f"""
             DELETE FROM {config['catalog']}.{config['schema']}.current_slow_queries 
-            WHERE first_seen < CURRENT_TIMESTAMP() - INTERVAL 24 HOURS
+            WHERE first_seen < CURRENT_TIMESTAMP - INTERVAL 24 HOURS
         """)
         
         # Get current slow queries
@@ -207,7 +207,7 @@ def refresh_current_slow_queries():
                 end_time as first_seen
             FROM system.query.history
             WHERE execution_duration_ms > 300000  -- SLOW queries only (your business logic)
-                AND end_time >= CURRENT_TIMESTAMP() - INTERVAL 4 HOURS
+                AND end_time >= CURRENT_TIMESTAMP - INTERVAL 4 HOURS
                 AND compute.warehouse_id IS NOT NULL
         """)
         
@@ -222,14 +222,14 @@ def refresh_current_slow_queries():
                     ON target.statement_id = source.statement_id
                     WHEN MATCHED THEN UPDATE SET
                         occurrence_count = target.occurrence_count + 1,
-                        created_at = CURRENT_TIMESTAMP()
+                        created_at = CURRENT_TIMESTAMP
                     WHEN NOT MATCHED THEN INSERT (
                         statement_id, executed_by, warehouse_id, execution_duration_ms, read_bytes,
                         performance_impact_score, suggested_optimization, first_seen, occurrence_count, created_at
                     ) VALUES (
                         source.statement_id, source.executed_by, source.warehouse_id, source.execution_duration_ms, 
                         source.read_bytes, source.performance_impact_score, source.suggested_optimization, 
-                        source.first_seen, 1, CURRENT_TIMESTAMP()
+                        source.first_seen, 1, CURRENT_TIMESTAMP
                     )
                 """)
                 
@@ -271,7 +271,7 @@ def refresh_hourly_performance():
         latest_hour = spark.sql(f"""
             SELECT COALESCE(
                 MAX(MAKE_TIMESTAMP(YEAR(query_date), MONTH(query_date), DAY(query_date), query_hour, 0, 0)),
-                CURRENT_TIMESTAMP() - INTERVAL 7 DAYS
+                CURRENT_TIMESTAMP - INTERVAL 7 DAYS
             ) as latest
             FROM {config['catalog']}.{config['schema']}.hourly_performance
         """).collect()[0]['latest']
@@ -300,10 +300,10 @@ def refresh_hourly_performance():
                 AVG(CASE WHEN execution_status = 'FINISHED' THEN 1.0 ELSE 0.0 END) as success_rate,
                 AVG(complexity_score) as avg_complexity_score,
                 AVG(optimization_score) as avg_optimization_score,
-                CURRENT_TIMESTAMP() as created_at
+                CURRENT_TIMESTAMP as created_at
             FROM {config['catalog']}.{config['schema']}.query_performance_raw
             WHERE start_time > CAST('{latest_hour}' AS TIMESTAMP)
-                AND DATE_TRUNC('HOUR', start_time) < DATE_TRUNC('HOUR', CURRENT_TIMESTAMP())
+                AND DATE_TRUNC('HOUR', start_time) < DATE_TRUNC('HOUR', CURRENT_TIMESTAMP)
             GROUP BY DATE(start_time), HOUR(start_time), workspace_id, user_id
         """)
         
