@@ -1,0 +1,8 @@
+# Minimal requirements for basic Databricks Apps deployment
+streamlit>=1.28.0
+databricks-sdk>=0.18.0
+pandas>=2.0.0
+
+# Add these back once basic deployment works:
+# databricks-mcp>=0.1.0  
+# plotly>=5.17.0
