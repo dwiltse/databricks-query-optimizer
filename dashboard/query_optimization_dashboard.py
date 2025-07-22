@@ -31,6 +31,20 @@ except Exception as e:
     # Ignore page config errors in deployment environments
     pass
 
+# Initialize session state if not available
+if not hasattr(st, 'session_state'):
+    class SessionState:
+        def __init__(self):
+            self._state = {}
+        def __getattr__(self, name):
+            return self._state.get(name, None)
+        def __setattr__(self, name, value):
+            if name.startswith('_'):
+                super().__setattr__(name, value)
+            else:
+                self._state[name] = value
+    st.session_state = SessionState()
+
 @st.cache_resource
 def initialize_mcp_connection():
     """Initialize Databricks MCP connection - optimized for Databricks Apps"""
