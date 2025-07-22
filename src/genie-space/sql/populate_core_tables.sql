@@ -10,11 +10,11 @@ USE mcp.query_optimization;
 
 INSERT OVERWRITE query_performance_raw
 SELECT 
-    statement_id as query_id,
+    statement_id,
     workspace_id,
     executed_by_user_id as user_id,
-    executed_by as user_email,  -- Using executed_by instead of executed_as
-    statement_text as query_text,
+    executed_by,
+    statement_text,
     -- Calculate query hash inline (no functions in Databricks SQL)
     SHA2(
         REGEXP_REPLACE(
@@ -34,9 +34,9 @@ SELECT
     ) as query_hash,
     start_time,  -- Actual field exists!
     end_time,
-    total_duration_ms as duration_ms,
-    read_rows as rows_read,
-    read_bytes as bytes_read,
+    total_duration_ms as execution_duration_ms,
+    read_rows,
+    read_bytes,
     0 as rows_produced,  -- Not available in system.query.history
     -- Approximate compute cost (basic estimation)
     CAST(total_duration_ms AS DOUBLE) / 3600000 * 2.5 as compute_cost_dbu,
@@ -106,7 +106,7 @@ SELECT
         WHEN UPPER(query_text) LIKE '%DISTINCT%' AND UPPER(query_text) LIKE '%GROUP BY%' THEN 'REDUNDANT_DISTINCT'
         WHEN UPPER(query_text) LIKE '%UNION%' AND UPPER(query_text) NOT LIKE '%UNION ALL%' THEN 'UNION_OPTIMIZATION'
         WHEN AVG(complexity_score) > 7 THEN 'HIGH_COMPLEXITY'
-        WHEN AVG(duration_ms) > 300000 THEN 'LONG_RUNNING'
+        WHEN AVG(execution_duration_ms) > 300000 THEN 'LONG_RUNNING'
         WHEN AVG(compute_cost_dbu) > 20 THEN 'HIGH_COST'
         ELSE 'STANDARD'
     END as pattern_type,
@@ -119,7 +119,7 @@ SELECT
         WHEN UPPER(query_text) LIKE '%DISTINCT%' AND UPPER(query_text) LIKE '%GROUP BY%' THEN 'Query has redundant DISTINCT with GROUP BY'
         WHEN UPPER(query_text) LIKE '%UNION%' AND UPPER(query_text) NOT LIKE '%UNION ALL%' THEN 'Query uses UNION instead of UNION ALL'
         WHEN AVG(complexity_score) > 7 THEN 'High complexity query that may benefit from simplification'
-        WHEN AVG(duration_ms) > 300000 THEN 'Long running query that needs performance optimization'
+        WHEN AVG(execution_duration_ms) > 300000 THEN 'Long running query that needs performance optimization'
         WHEN AVG(compute_cost_dbu) > 20 THEN 'High cost query that needs cost optimization'
         ELSE 'Standard query pattern'
     END as pattern_description,
@@ -134,12 +134,12 @@ SELECT
     MIN(start_time) as first_seen,
     MAX(start_time) as last_seen,
     COUNT(*) as occurrence_count,
-    AVG(duration_ms) as avg_duration_ms,
+    AVG(execution_duration_ms) as avg_duration_ms,
     AVG(compute_cost_dbu) as avg_cost_dbu,
     -- Optimization priority using your SLOW/MODERATE/FAST logic
     CASE 
-        WHEN AVG(duration_ms) > 300000 THEN 'HIGH'     -- SLOW queries
-        WHEN AVG(duration_ms) > 60000 THEN 'MEDIUM'    -- MODERATE queries  
+        WHEN AVG(execution_duration_ms) > 300000 THEN 'HIGH'     -- SLOW queries
+        WHEN AVG(execution_duration_ms) > 60000 THEN 'MEDIUM'    -- MODERATE queries  
         ELSE 'LOW'                                      -- FAST queries
     END as optimization_priority,
     -- Optimization recommendations
@@ -151,7 +151,7 @@ SELECT
         WHEN UPPER(query_text) LIKE '%DISTINCT%' AND UPPER(query_text) LIKE '%GROUP BY%' THEN 'Remove redundant DISTINCT'
         WHEN UPPER(query_text) LIKE '%UNION%' AND UPPER(query_text) NOT LIKE '%UNION ALL%' THEN 'Use UNION ALL when appropriate'
         WHEN AVG(complexity_score) > 7 THEN 'Consider breaking down complex query into simpler parts'
-        WHEN AVG(duration_ms) > 300000 THEN 'Review query execution plan and consider indexing'
+        WHEN AVG(execution_duration_ms) > 300000 THEN 'Review query execution plan and consider indexing'
         WHEN AVG(compute_cost_dbu) > 20 THEN 'Optimize data access patterns and consider caching'
         ELSE 'Review for general optimization opportunities'
     END as optimization_recommendations,
@@ -180,7 +180,7 @@ SELECT
     user_id,
     CURRENT_DATE() - INTERVAL 30 DAYS as baseline_period_start,
     CURRENT_DATE() - INTERVAL 1 DAY as baseline_period_end,
-    AVG(duration_ms) as baseline_avg_duration_ms,
+    AVG(execution_duration_ms) as baseline_avg_duration_ms,
     percentile_approx(duration_ms, 0.95) as baseline_p95_duration_ms,
     AVG(compute_cost_dbu) as baseline_avg_cost_dbu,
     CAST(SUM(CASE WHEN execution_status = 'FINISHED' THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) as baseline_success_rate,

@@ -5,17 +5,17 @@ USE mcp.query_optimization;
 
 -- Raw query performance data from system tables
 CREATE TABLE IF NOT EXISTS query_performance_raw (
-    query_id STRING COMMENT 'Unique identifier for the query',
+    statement_id STRING COMMENT 'Unique identifier for the query',
     workspace_id STRING COMMENT 'Workspace where query was executed',
     user_id STRING COMMENT 'User who executed the query',
-    user_email STRING COMMENT 'User email address',
-    query_text STRING COMMENT 'Full SQL query text',
+    executed_by STRING COMMENT 'User email address',
+    statement_text STRING COMMENT 'Full SQL query text',
     query_hash STRING COMMENT 'Hash of query text for pattern matching',
     start_time TIMESTAMP COMMENT 'Query execution start time',
     end_time TIMESTAMP COMMENT 'Query execution end time',
-    duration_ms BIGINT COMMENT 'Query execution duration in milliseconds',
-    rows_read BIGINT COMMENT 'Number of rows read by the query',
-    bytes_read BIGINT COMMENT 'Number of bytes read by the query',
+    execution_duration_ms BIGINT COMMENT 'Query execution duration in milliseconds',
+    read_rows BIGINT COMMENT 'Number of rows read by the query',
+    read_bytes BIGINT COMMENT 'Number of bytes read by the query',
     rows_produced BIGINT COMMENT 'Number of rows produced by the query',
     compute_cost_dbu DECIMAL(10,4) COMMENT 'DBU cost for query execution',
     execution_status STRING COMMENT 'Query execution status (FINISHED, FAILED, etc.)',
