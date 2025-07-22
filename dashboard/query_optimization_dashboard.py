@@ -3,6 +3,9 @@ Query Optimization Dashboard - Databricks MCP POC
 Deployed as Databricks App - Connects to Genie Space 'system_table_mcp_test' via Managed MCP
 """
 
+import warnings
+warnings.filterwarnings("ignore", message=".*missing script run context.*")
+
 import streamlit as st
 import plotly.express as px
 import pandas as pd
@@ -17,12 +20,16 @@ except ImportError:
     st.error("⚠️ Databricks MCP libraries not available. Install databricks-mcp in your App environment.")
     MCP_AVAILABLE = False
 
-# Page configuration
-st.set_page_config(
-    page_title="Query Optimization Command Center",
-    page_icon="🚀",
-    layout="wide"
-)
+# Page configuration - with error handling for deployment contexts
+try:
+    st.set_page_config(
+        page_title="Query Optimization Command Center",
+        page_icon="🚀",
+        layout="wide"
+    )
+except Exception as e:
+    # Ignore page config errors in deployment environments
+    pass
 
 @st.cache_resource
 def initialize_mcp_connection():
