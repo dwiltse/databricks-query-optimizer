@@ -99,12 +99,12 @@ SELECT
     query_hash,
     -- Determine pattern type based on query characteristics
     CASE 
-        WHEN UPPER(query_text) LIKE '%SELECT *%' THEN 'SELECT_ALL'
-        WHEN UPPER(query_text) LIKE '%ORDER BY%' AND UPPER(query_text) NOT LIKE '%LIMIT%' THEN 'UNBOUNDED_SORT'
-        WHEN UPPER(query_text) LIKE '%JOIN%' AND UPPER(query_text) NOT LIKE '%ON%' THEN 'CARTESIAN_JOIN'
-        WHEN UPPER(query_text) LIKE '%WHERE%' AND UPPER(query_text) NOT LIKE '%PARTITION%' THEN 'UNPARTITIONED_FILTER'
-        WHEN UPPER(query_text) LIKE '%DISTINCT%' AND UPPER(query_text) LIKE '%GROUP BY%' THEN 'REDUNDANT_DISTINCT'
-        WHEN UPPER(query_text) LIKE '%UNION%' AND UPPER(query_text) NOT LIKE '%UNION ALL%' THEN 'UNION_OPTIMIZATION'
+        WHEN UPPER(statement_text) LIKE '%SELECT *%' THEN 'SELECT_ALL'
+        WHEN UPPER(statement_text) LIKE '%ORDER BY%' AND UPPER(statement_text) NOT LIKE '%LIMIT%' THEN 'UNBOUNDED_SORT'
+        WHEN UPPER(statement_text) LIKE '%JOIN%' AND UPPER(statement_text) NOT LIKE '%ON%' THEN 'CARTESIAN_JOIN'
+        WHEN UPPER(statement_text) LIKE '%WHERE%' AND UPPER(statement_text) NOT LIKE '%PARTITION%' THEN 'UNPARTITIONED_FILTER'
+        WHEN UPPER(statement_text) LIKE '%DISTINCT%' AND UPPER(statement_text) LIKE '%GROUP BY%' THEN 'REDUNDANT_DISTINCT'
+        WHEN UPPER(statement_text) LIKE '%UNION%' AND UPPER(statement_text) NOT LIKE '%UNION ALL%' THEN 'UNION_OPTIMIZATION'
         WHEN AVG(complexity_score) > 7 THEN 'HIGH_COMPLEXITY'
         WHEN AVG(execution_duration_ms) > 300000 THEN 'LONG_RUNNING'
         WHEN AVG(compute_cost_dbu) > 20 THEN 'HIGH_COST'
@@ -112,12 +112,12 @@ SELECT
     END as pattern_type,
     -- Pattern description
     CASE 
-        WHEN UPPER(query_text) LIKE '%SELECT *%' THEN 'Query uses SELECT * which may retrieve unnecessary columns'
-        WHEN UPPER(query_text) LIKE '%ORDER BY%' AND UPPER(query_text) NOT LIKE '%LIMIT%' THEN 'Query uses ORDER BY without LIMIT, sorting entire dataset'
-        WHEN UPPER(query_text) LIKE '%JOIN%' AND UPPER(query_text) NOT LIKE '%ON%' THEN 'Query may have Cartesian JOIN without proper conditions'
-        WHEN UPPER(query_text) LIKE '%WHERE%' AND UPPER(query_text) NOT LIKE '%PARTITION%' THEN 'Query filters may not utilize partitioning'
-        WHEN UPPER(query_text) LIKE '%DISTINCT%' AND UPPER(query_text) LIKE '%GROUP BY%' THEN 'Query has redundant DISTINCT with GROUP BY'
-        WHEN UPPER(query_text) LIKE '%UNION%' AND UPPER(query_text) NOT LIKE '%UNION ALL%' THEN 'Query uses UNION instead of UNION ALL'
+        WHEN UPPER(statement_text) LIKE '%SELECT *%' THEN 'Query uses SELECT * which may retrieve unnecessary columns'
+        WHEN UPPER(statement_text) LIKE '%ORDER BY%' AND UPPER(statement_text) NOT LIKE '%LIMIT%' THEN 'Query uses ORDER BY without LIMIT, sorting entire dataset'
+        WHEN UPPER(statement_text) LIKE '%JOIN%' AND UPPER(statement_text) NOT LIKE '%ON%' THEN 'Query may have Cartesian JOIN without proper conditions'
+        WHEN UPPER(statement_text) LIKE '%WHERE%' AND UPPER(statement_text) NOT LIKE '%PARTITION%' THEN 'Query filters may not utilize partitioning'
+        WHEN UPPER(statement_text) LIKE '%DISTINCT%' AND UPPER(statement_text) LIKE '%GROUP BY%' THEN 'Query has redundant DISTINCT with GROUP BY'
+        WHEN UPPER(statement_text) LIKE '%UNION%' AND UPPER(statement_text) NOT LIKE '%UNION ALL%' THEN 'Query uses UNION instead of UNION ALL'
         WHEN AVG(complexity_score) > 7 THEN 'High complexity query that may benefit from simplification'
         WHEN AVG(execution_duration_ms) > 300000 THEN 'Long running query that needs performance optimization'
         WHEN AVG(compute_cost_dbu) > 20 THEN 'High cost query that needs cost optimization'
@@ -126,7 +126,7 @@ SELECT
     -- Create query template by replacing literals
     REGEXP_REPLACE(
         REGEXP_REPLACE(
-            REGEXP_REPLACE(query_text, '[0-9]+', '?'),
+            REGEXP_REPLACE(statement_text, '[0-9]+', '?'),
             '\'[^\']*\'', '?'
         ),
         '"[^"]*"', '?'
@@ -144,12 +144,12 @@ SELECT
     END as optimization_priority,
     -- Optimization recommendations
     CASE 
-        WHEN UPPER(query_text) LIKE '%SELECT *%' THEN 'Replace SELECT * with specific column names'
-        WHEN UPPER(query_text) LIKE '%ORDER BY%' AND UPPER(query_text) NOT LIKE '%LIMIT%' THEN 'Add LIMIT clause to ORDER BY queries'
-        WHEN UPPER(query_text) LIKE '%JOIN%' AND UPPER(query_text) NOT LIKE '%ON%' THEN 'Add proper JOIN conditions'
-        WHEN UPPER(query_text) LIKE '%WHERE%' AND UPPER(query_text) NOT LIKE '%PARTITION%' THEN 'Add partition filters to WHERE clause'
-        WHEN UPPER(query_text) LIKE '%DISTINCT%' AND UPPER(query_text) LIKE '%GROUP BY%' THEN 'Remove redundant DISTINCT'
-        WHEN UPPER(query_text) LIKE '%UNION%' AND UPPER(query_text) NOT LIKE '%UNION ALL%' THEN 'Use UNION ALL when appropriate'
+        WHEN UPPER(statement_text) LIKE '%SELECT *%' THEN 'Replace SELECT * with specific column names'
+        WHEN UPPER(statement_text) LIKE '%ORDER BY%' AND UPPER(statement_text) NOT LIKE '%LIMIT%' THEN 'Add LIMIT clause to ORDER BY queries'
+        WHEN UPPER(statement_text) LIKE '%JOIN%' AND UPPER(statement_text) NOT LIKE '%ON%' THEN 'Add proper JOIN conditions'
+        WHEN UPPER(statement_text) LIKE '%WHERE%' AND UPPER(statement_text) NOT LIKE '%PARTITION%' THEN 'Add partition filters to WHERE clause'
+        WHEN UPPER(statement_text) LIKE '%DISTINCT%' AND UPPER(statement_text) LIKE '%GROUP BY%' THEN 'Remove redundant DISTINCT'
+        WHEN UPPER(statement_text) LIKE '%UNION%' AND UPPER(statement_text) NOT LIKE '%UNION ALL%' THEN 'Use UNION ALL when appropriate'
         WHEN AVG(complexity_score) > 7 THEN 'Consider breaking down complex query into simpler parts'
         WHEN AVG(execution_duration_ms) > 300000 THEN 'Review query execution plan and consider indexing'
         WHEN AVG(compute_cost_dbu) > 20 THEN 'Optimize data access patterns and consider caching'
@@ -159,7 +159,7 @@ SELECT
     CURRENT_TIMESTAMP as updated_at
 FROM query_performance_raw
 WHERE execution_status = 'FINISHED'
-GROUP BY query_hash, query_text, query_type
+GROUP BY query_hash, statement_text, query_type
 HAVING COUNT(*) >= 2;  -- Only patterns that occur more than once
 
 -- =============================================================================
@@ -181,12 +181,12 @@ SELECT
     CURRENT_DATE() - INTERVAL 30 DAYS as baseline_period_start,
     CURRENT_DATE() - INTERVAL 1 DAY as baseline_period_end,
     AVG(execution_duration_ms) as baseline_avg_duration_ms,
-    percentile_approx(duration_ms, 0.95) as baseline_p95_duration_ms,
+    percentile_approx(execution_duration_ms, 0.95) as baseline_p95_duration_ms,
     AVG(compute_cost_dbu) as baseline_avg_cost_dbu,
     CAST(SUM(CASE WHEN execution_status = 'FINISHED' THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) as baseline_success_rate,
     COUNT(*) as baseline_execution_count,
     -- Set thresholds at 2x the 95th percentile
-    percentile_approx(duration_ms, 0.95) * 2 as threshold_duration_ms,
+    percentile_approx(execution_duration_ms, 0.95) * 2 as threshold_duration_ms,
     percentile_approx(compute_cost_dbu, 0.95) * 2 as threshold_cost_dbu,
     CURRENT_TIMESTAMP as created_at,
     CURRENT_TIMESTAMP as updated_at
