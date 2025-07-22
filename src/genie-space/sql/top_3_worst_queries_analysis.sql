@@ -1,7 +1,19 @@
 -- Top 3 Worst Queries Analysis for POC Demo
 -- This script identifies the worst performing queries with actionable optimization recommendations
+-- PREREQUISITES: Run 01_schema_setup.sql, 02_core_tables.sql, and populate_core_tables.sql first
 
 USE mcp.query_optimization;
+
+-- =============================================================================
+-- Prerequisite Check: Ensure Required Tables Exist and Have Data
+-- =============================================================================
+
+SELECT 
+    CASE 
+        WHEN COUNT(*) = 0 THEN 'ERROR: query_performance_raw table is empty. Run populate_core_tables.sql first.'
+        ELSE CONCAT('SUCCESS: Found ', COUNT(*), ' records in query_performance_raw table')
+    END AS prerequisite_check
+FROM query_performance_raw;
 
 -- =============================================================================
 -- Top 3 Worst Queries by Performance Impact Score
