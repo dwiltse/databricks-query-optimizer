@@ -45,11 +45,13 @@ def main():
         try:
             from databricks_mcp import DatabricksMCPClient
             
-            # Show connection attempt details
-            mcp_url = f"{workspace_client.config.host}/api/2.0/mcp/functions/genie"
+            # Show connection attempt details - using correct Genie Space URL format
+            genie_space_id = "system_table_mcp_test"
+            mcp_url = f"{workspace_client.config.host}/api/2.0/mcp/genie/{genie_space_id}"
             st.write(f"**MCP URL:** {mcp_url}")
+            st.write(f"**Genie Space ID:** {genie_space_id}")
             
-            # Try to connect to MCP server
+            # Try to connect to MCP server using correct URL format
             mcp_client = DatabricksMCPClient(
                 server_url=mcp_url,
                 workspace_client=workspace_client
@@ -62,7 +64,8 @@ def main():
             try:
                 # Just verify the client is working - don't run a full query yet
                 st.write("**MCP Client Type:**", type(mcp_client).__name__)
-                st.write("**Available Methods:**", [m for m in dir(mcp_client) if not m.startswith('_')][:5])  # Show first 5 methods
+                all_methods = [m for m in dir(mcp_client) if not m.startswith('_')]
+                st.write("**Available Methods:**", all_methods)  # Show ALL methods to find the right one
             except Exception as ping_error:
                 st.warning(f"⚠️ MCP client test failed: {str(ping_error)}")
             
@@ -117,7 +120,14 @@ def main():
                             st.write("**Debug Info:**")
                             st.write(f"Query: {simple_query}")
                             
-                            response = mcp_client.query(simple_query)
+                            # Use the correct method from Databricks documentation
+                            if hasattr(mcp_client, 'call_tool'):
+                                # This is the documented method for Databricks MCP
+                                response = mcp_client.call_tool("query", {"question": simple_query})
+                            else:
+                                st.error("❌ call_tool method not found on MCP client")
+                                st.write("Available methods:", [m for m in dir(mcp_client) if not m.startswith('_')])
+                                raise Exception("call_tool method not found")
                             
                             st.success("✅ MCP Query completed!")
                             st.subheader("🤖 AI Analysis")
@@ -137,9 +147,17 @@ def main():
                         # Try a very simple test query
                         st.write("**Trying simple test query...**")
                         try:
-                            test_response = mcp_client.query("Hello, can you see the system_table_mcp_test Genie Space?")
-                            st.success("✅ Simple query worked!")
-                            st.write("Test response:", test_response)
+                            # Use the correct Databricks MCP method
+                            test_query = "Hello, can you see the system_table_mcp_test Genie Space?"
+                            if hasattr(mcp_client, 'call_tool'):
+                                test_response = mcp_client.call_tool("query", {"question": test_query})
+                            else:
+                                st.error("No call_tool method available for test")
+                                test_response = None
+                                
+                            if test_response:
+                                st.success("✅ Simple query worked!")
+                                st.write("Test response:", test_response)
                         except Exception as test_error:
                             st.error(f"❌ Simple query also failed: {str(test_error)}")
                         

@@ -51,6 +51,38 @@ This project implements a comprehensive query performance optimization platform 
 4. All business rules configured in `config.yaml`
 5. Track implementation with `optimization_tracking` table
 
+## 🚨 CRITICAL: Databricks MCP API Documentation
+**ALWAYS consult this documentation before writing ANY MCP code:**
+- **Primary**: https://docs.databricks.com/aws/en/generative-ai/mcp/
+- **Local copy**: `docs/databricks-mcp-api.md` (if available)
+
+### Required MCP Patterns (From Official Docs):
+```python
+# Connection (CORRECT FORMAT):
+from databricks_mcp import DatabricksMCPClient
+from databricks.sdk import WorkspaceClient
+
+workspace_client = WorkspaceClient()
+mcp_client = DatabricksMCPClient(
+    server_url=f"{workspace_client.config.host}/api/2.0/mcp/genie/{genie_space_id}",
+    workspace_client=workspace_client
+)
+
+# Querying (CORRECT METHOD):
+response = mcp_client.call_tool("query", {"question": user_question})
+```
+
+### ⚠️ CRITICAL RULES:
+- **NEVER guess at method names** - always verify against documentation first!
+- **URL Format**: Must include `/genie/{genie_space_id}` not `/functions/genie`
+- **Query Method**: Always use `call_tool("query", {"question": "..."})` 
+- **Feature Status**: This is a Beta feature requiring serverless compute
+
+### Common Mistakes to Avoid:
+- ❌ `mcp_client.query()` - Method doesn't exist
+- ❌ `/api/2.0/mcp/functions/genie` - Wrong URL format  
+- ❌ Assuming methods without checking docs first
+
 ## Databricks Genie Space Best Practices
 **References**: 
 - [Official Genie Best Practices](http://docs.databricks.com/aws/en/genie/best-practices)
