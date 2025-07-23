@@ -45,20 +45,38 @@ def main():
         try:
             from databricks_mcp import DatabricksMCPClient
             
+            # Show connection attempt details
+            mcp_url = f"{workspace_client.config.host}/api/2.0/mcp/functions/genie"
+            st.write(f"**MCP URL:** {mcp_url}")
+            
             # Try to connect to MCP server
             mcp_client = DatabricksMCPClient(
-                server_url=f"{workspace_client.config.host}/api/2.0/mcp/functions/genie",
+                server_url=mcp_url,
                 workspace_client=workspace_client
             )
             mcp_connected = True
             st.success("✅ MCP connection established")
             st.info("🎯 Ready to query Genie Space: **system_table_mcp_test**")
             
-        except ImportError:
+            # Test connection with a simple ping
+            try:
+                # Just verify the client is working - don't run a full query yet
+                st.write("**MCP Client Type:**", type(mcp_client).__name__)
+                st.write("**Available Methods:**", [m for m in dir(mcp_client) if not m.startswith('_')][:5])  # Show first 5 methods
+            except Exception as ping_error:
+                st.warning(f"⚠️ MCP client test failed: {str(ping_error)}")
+            
+        except ImportError as import_error:
             st.warning("⚠️ MCP libraries not installed")
+            st.write(f"Import error: {str(import_error)}")
         except Exception as mcp_error:
             st.warning(f"⚠️ MCP connection failed: {str(mcp_error)}")
             st.info("💡 Ensure MCP is enabled in workspace and Genie Space exists")
+            
+            # Show more details about the error
+            with st.expander("🔧 MCP Connection Debug"):
+                import traceback
+                st.code(traceback.format_exc())
             
     except Exception as e:
         st.error(f"❌ Databricks connection failed: {str(e)}")
@@ -93,22 +111,13 @@ def main():
                         with st.spinner("🤖 Querying Genie Space via MCP..."):
                             mcp_client = st.session_state.connections['mcp_client']
                             
-                            # Query the system_table_mcp_test Genie Space
-                            genie_query = f"""
-                            Context: You are querying the 'system_table_mcp_test' Genie Space which contains query optimization data.
+                            # Simplified query format - try direct question first
+                            simple_query = f"Using the system_table_mcp_test Genie Space, {question}"
                             
-                            Available tables:
-                            - query_performance_raw: Historical query performance metrics
-                            - query_patterns: Identified optimization patterns  
-                            - optimization_tracking: Applied optimizations and impact
-                            - performance_baselines: Performance benchmarks
+                            st.write("**Debug Info:**")
+                            st.write(f"Query: {simple_query}")
                             
-                            Question: {question}
-                            
-                            Please provide insights based on the data in these tables.
-                            """
-                            
-                            response = mcp_client.query(genie_query)
+                            response = mcp_client.query(simple_query)
                             
                             st.success("✅ MCP Query completed!")
                             st.subheader("🤖 AI Analysis")
@@ -117,6 +126,23 @@ def main():
                     
                     except Exception as e:
                         st.error(f"❌ MCP query failed: {str(e)}")
+                        
+                        # More detailed error info
+                        import traceback
+                        with st.expander("🔧 Detailed Error Info"):
+                            st.code(traceback.format_exc())
+                            st.write("**Error Type:**", type(e).__name__)
+                            st.write("**MCP Client Info:**", type(mcp_client).__name__)
+                        
+                        # Try a very simple test query
+                        st.write("**Trying simple test query...**")
+                        try:
+                            test_response = mcp_client.query("Hello, can you see the system_table_mcp_test Genie Space?")
+                            st.success("✅ Simple query worked!")
+                            st.write("Test response:", test_response)
+                        except Exception as test_error:
+                            st.error(f"❌ Simple query also failed: {str(test_error)}")
+                        
                         st.info("🚧 Using sample data instead")
                         st.balloons()
                 
