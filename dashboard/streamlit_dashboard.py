@@ -41,33 +41,49 @@ def main():
         st.success("✅ Connected to Databricks workspace")
         st.write(f"**Host:** {workspace_client.config.host}")
         
-        # Test MCP connection
+        # Test Direct Genie API connection (alternative to MCP)
         try:
-            from databricks_mcp import DatabricksMCPClient
+            import requests
+            import json
             
-            # Show connection attempt details - using correct Genie Space URL format
+            # Use Direct Genie Conversation API (Public Preview - no MCP needed!)
             genie_space_id = "system_table_mcp_test"
-            mcp_url = f"{workspace_client.config.host}/api/2.0/mcp/genie/{genie_space_id}"
-            st.write(f"**MCP URL:** {mcp_url}")
-            st.write(f"**Genie Space ID:** {genie_space_id}")
             
-            # Try to connect to MCP server using correct URL format
-            mcp_client = DatabricksMCPClient(
-                server_url=mcp_url,
-                workspace_client=workspace_client
-            )
-            mcp_connected = True
-            st.success("✅ MCP connection established")
-            st.info("🎯 Ready to query Genie Space: **system_table_mcp_test**")
+            # Test direct API connection
+            headers = {
+                "Authorization": f"Bearer {workspace_client.config.token}",
+                "Content-Type": "application/json"
+            }
             
-            # Test connection with a simple ping
+            # Test with List Spaces endpoint first
+            list_spaces_url = f"{workspace_client.config.host}/api/2.0/genie/spaces"
+            
+            st.write("🔍 Testing Direct Genie API connection...")
+            st.write(f"**API URL:** {list_spaces_url}")
+            
             try:
-                # Just verify the client is working - don't run a full query yet
-                st.write("**MCP Client Type:**", type(mcp_client).__name__)
-                all_methods = [m for m in dir(mcp_client) if not m.startswith('_')]
-                st.write("**Available Methods:**", all_methods)  # Show ALL methods to find the right one
-            except Exception as ping_error:
-                st.warning(f"⚠️ MCP client test failed: {str(ping_error)}")
+                response = requests.get(list_spaces_url, headers=headers)
+                if response.status_code == 200:
+                    spaces = response.json()
+                    st.success("✅ Direct Genie API connected!")
+                    st.write("**Available Genie Spaces:**")
+                    for space in spaces.get('spaces', []):
+                        st.write(f"- **{space.get('display_name', 'Unknown')}** (ID: `{space.get('id', 'Unknown')}`)")
+                        if space.get('id') == genie_space_id:
+                            st.info(f"🎯 Found target space: **{space.get('display_name')}**")
+                    
+                    genie_connected = True
+                    st.success("✅ Ready to use Direct Genie API")
+                else:
+                    st.error(f"❌ API connection failed: {response.status_code}")
+                    st.write(f"Response: {response.text}")
+                    genie_connected = False
+                    
+            except Exception as api_error:
+                st.error(f"❌ Direct API connection failed: {api_error}")
+                genie_connected = False
+            st.write(f"**Genie Space ID:** {genie_space_id}")
+            st.info("🎯 Using Direct Genie API (no MCP required!)")
             
         except ImportError as import_error:
             st.warning("⚠️ MCP libraries not installed")
@@ -90,8 +106,9 @@ def main():
         st.session_state.connections = {}
     
     st.session_state.connections['workspace'] = workspace_connected
-    st.session_state.connections['mcp'] = mcp_connected
-    st.session_state.connections['mcp_client'] = mcp_client
+    st.session_state.connections['genie'] = genie_connected if 'genie_connected' in locals() else False
+    st.session_state.connections['workspace_client'] = workspace_client
+    st.session_state.connections['genie_space_id'] = genie_space_id if 'genie_space_id' in locals() else None
     
     # Simple input interface
     st.header("💬 Query Interface")
@@ -108,8 +125,8 @@ def main():
             if question:
                 st.write(f"**Question:** {question}")
                 
-                # Try MCP query if connected
-                if st.session_state.connections.get('mcp') and st.session_state.connections.get('mcp_client'):
+                # Try Direct Genie API query if connected
+                if st.session_state.connections.get('genie') and st.session_state.connections.get('workspace_client'):
                     try:
                         with st.spinner("🤖 Querying Genie Space via MCP..."):
                             mcp_client = st.session_state.connections['mcp_client']
@@ -136,8 +153,34 @@ def main():
                             
                             # Use the correct method from Databricks documentation
                             if hasattr(mcp_client, 'call_tool'):
-                                # This is the documented method for Databricks MCP
-                                response = mcp_client.call_tool("query", {"question": simple_query})
+                                # Try different tool names if "query" doesn't work
+                                tool_names_to_try = ["query", "ask", "question", "chat", "analyze"]
+                                
+                                response = None
+                                for tool_name in tool_names_to_try:
+                                    try:
+                                        st.write(f"🔍 Trying tool: **{tool_name}**")
+                                        response = mcp_client.call_tool(tool_name, {"question": simple_query})
+                                        st.success(f"✅ Successfully used tool: **{tool_name}**")
+                                        break
+                                    except Exception as tool_error:
+                                        st.warning(f"❌ Tool **{tool_name}** failed: {str(tool_error)[:100]}...")
+                                        continue
+                                
+                                if response is None:
+                                    st.error("❌ All tool attempts failed.")
+                                    st.warning("🚨 **Possible Issues:**")
+                                    st.write("1. **MCP Beta Feature**: Databricks MCP is in Beta and requires serverless compute")
+                                    st.write("2. **Serverless Compute**: Ensure serverless compute is enabled in your workspace")
+                                    st.write("3. **Workspace Settings**: MCP integration might not be enabled for your workspace")
+                                    st.write("4. **Genie Space Configuration**: The space may not have proper data sources or instructions")
+                                    
+                                    st.info("💡 **Next Steps:**")
+                                    st.write("- Contact your Databricks admin to enable MCP Beta features")
+                                    st.write("- Verify serverless compute is available and enabled")
+                                    st.write("- Check that your workspace has MCP integration enabled")
+                                    
+                                    raise Exception("MCP integration may not be properly enabled")
                             else:
                                 st.error("❌ call_tool method not found on MCP client")
                                 st.write("Available methods:", [m for m in dir(mcp_client) if not m.startswith('_')])
