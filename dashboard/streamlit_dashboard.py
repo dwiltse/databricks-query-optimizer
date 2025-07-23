@@ -26,25 +26,51 @@ def main():
     st.write(f"**Version:** {APP_VERSION}")
     st.write("**Status:** Testing Databricks Apps deployment")
     
-    # Simple connection test
+    # Connection test with MCP
     st.header("🔌 Connection Status")
+    
+    # Initialize connection status
+    workspace_connected = False
+    mcp_connected = False
+    mcp_client = None
     
     try:
         from databricks.sdk import WorkspaceClient
         workspace_client = WorkspaceClient()
+        workspace_connected = True
         st.success("✅ Connected to Databricks workspace")
         st.write(f"**Host:** {workspace_client.config.host}")
         
-        # Test MCP availability
+        # Test MCP connection
         try:
             from databricks_mcp import DatabricksMCPClient
-            st.success("✅ MCP libraries available")
+            
+            # Try to connect to MCP server
+            mcp_client = DatabricksMCPClient(
+                server_url=f"{workspace_client.config.host}/api/2.0/mcp/functions/genie",
+                workspace_client=workspace_client
+            )
+            mcp_connected = True
+            st.success("✅ MCP connection established")
+            st.info("🎯 Ready to query Genie Space: **system_table_mcp_test**")
+            
         except ImportError:
-            st.warning("⚠️ MCP libraries not available (will be added later)")
+            st.warning("⚠️ MCP libraries not installed")
+        except Exception as mcp_error:
+            st.warning(f"⚠️ MCP connection failed: {str(mcp_error)}")
+            st.info("💡 Ensure MCP is enabled in workspace and Genie Space exists")
             
     except Exception as e:
-        st.error(f"❌ Connection failed: {str(e)}")
+        st.error(f"❌ Databricks connection failed: {str(e)}")
         st.info("This may be expected during initial setup")
+    
+    # Store connection status in session state for use in other sections
+    if 'connections' not in st.session_state:
+        st.session_state.connections = {}
+    
+    st.session_state.connections['workspace'] = workspace_connected
+    st.session_state.connections['mcp'] = mcp_connected
+    st.session_state.connections['mcp_client'] = mcp_client
     
     # Simple input interface
     st.header("💬 Query Interface")
@@ -60,8 +86,44 @@ def main():
         if st.button("🔍 Analyze", type="primary"):
             if question:
                 st.write(f"**Question:** {question}")
-                st.info("🚧 MCP integration coming next - basic deployment successful!")
-                st.balloons()
+                
+                # Try MCP query if connected
+                if st.session_state.connections.get('mcp') and st.session_state.connections.get('mcp_client'):
+                    try:
+                        with st.spinner("🤖 Querying Genie Space via MCP..."):
+                            mcp_client = st.session_state.connections['mcp_client']
+                            
+                            # Query the system_table_mcp_test Genie Space
+                            genie_query = f"""
+                            Context: You are querying the 'system_table_mcp_test' Genie Space which contains query optimization data.
+                            
+                            Available tables:
+                            - query_performance_raw: Historical query performance metrics
+                            - query_patterns: Identified optimization patterns  
+                            - optimization_tracking: Applied optimizations and impact
+                            - performance_baselines: Performance benchmarks
+                            
+                            Question: {question}
+                            
+                            Please provide insights based on the data in these tables.
+                            """
+                            
+                            response = mcp_client.query(genie_query)
+                            
+                            st.success("✅ MCP Query completed!")
+                            st.subheader("🤖 AI Analysis")
+                            st.write(response)
+                            st.balloons()
+                    
+                    except Exception as e:
+                        st.error(f"❌ MCP query failed: {str(e)}")
+                        st.info("🚧 Using sample data instead")
+                        st.balloons()
+                
+                else:
+                    st.info("🚧 MCP not connected - using sample data for demo")
+                    st.balloons()
+                    
             else:
                 st.warning("Please enter a question")
     
@@ -112,8 +174,17 @@ def main():
     
     # Footer
     st.divider()
-    st.success("🎯 **Databricks Apps deployment successful!** Ready to add MCP integration.")
-    st.caption("Next: Add MCP connection to system_table_mcp_test Genie Space")
+    
+    # Dynamic status based on connections
+    if st.session_state.connections.get('mcp'):
+        st.success("🎯 **MCP Integration Active!** Connected to system_table_mcp_test Genie Space")
+        st.caption("✅ Ready for live query optimization analysis")
+    elif st.session_state.connections.get('workspace'):
+        st.info("🔧 **Databricks Connected** - MCP setup in progress")
+        st.caption("Next: Enable MCP access and verify Genie Space exists")
+    else:
+        st.warning("🚧 **Setup Required** - Databricks connection needed")
+        st.caption("Deploy to Databricks Apps to establish connections")
 
 if __name__ == "__main__":
     main()

@@ -4,5 +4,5 @@ streamlit==1.28.0
 pandas==2.1.0
 plotly==5.17.0
 
-# Add these back once basic deployment works:
-# databricks-mcp>=0.1.0
+# Phase 1: Add MCP support
+databricks-mcp>=0.1.0
