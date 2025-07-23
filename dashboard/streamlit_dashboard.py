@@ -120,6 +120,20 @@ def main():
                             st.write("**Debug Info:**")
                             st.write(f"Query: {simple_query}")
                             
+                            # First, try to list available tools
+                            try:
+                                # Check if list_tools method exists
+                                if hasattr(mcp_client, 'list_tools'):
+                                    tools = mcp_client.list_tools()
+                                    st.write("**Available Tools:**", tools)
+                                elif hasattr(mcp_client, 'get_tools'):
+                                    tools = mcp_client.get_tools()
+                                    st.write("**Available Tools:**", tools)
+                                else:
+                                    st.info("Cannot list available tools - proceeding with query")
+                            except Exception as tool_list_error:
+                                st.warning(f"Could not list tools: {tool_list_error}")
+                            
                             # Use the correct method from Databricks documentation
                             if hasattr(mcp_client, 'call_tool'):
                                 # This is the documented method for Databricks MCP
