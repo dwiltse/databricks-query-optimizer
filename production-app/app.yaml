@@ -1,0 +1,22 @@
+command:
+  - "streamlit"
+  - "run"
+  - "app.py"
+  - "--server.port=8000"
+  - "--server.address=0.0.0.0"
+  - "--server.headless=true"
+  - "--server.enableCORS=false"
+
+env:
+  - name: "DATABRICKS_APP_PORT"
+    value: "8000"
+  - name: "GENIE_SPACE_ID" 
+    value: "system_table_mcp_test"
+  - name: "STREAMLIT_SERVER_HEADLESS"
+    value: "true"
+
+runtime: python_3.11
+
+health_check:
+  startup_time_seconds: 60
+  readiness_timeout_seconds: 30
